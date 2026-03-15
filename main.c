@@ -1,23 +1,3 @@
-/* 
-Possible solution when using too many LEDs:
-
-// Individual variables for clear access
-LED_t red_LED = { .write = RED_LED_ON, ... };
-LED_t blue_LED = { .write = BLUE_LED_ON, ... };
-LED_t green_LED = { .write = GREEN_LED_ON, ... };
-
-// Additional array for collective operations
-LED_t *allLEDs[] = { &red_LED, &blue_LED, &green_LED };
-const uint8_t NUM_LEDS = 3;
-
-// Then: Individual access
-LED_toggle(&red_LED);
-
-// Or all together
-for(int i = 0; i < NUM_LEDS; i++) {
-    LED_off(allLEDs[i]);  // Turn all off
-}
-*/
 #include "TM4C123GH6PM.h"       // TI - MCU - CMSIS 
 #include "system_TM4C123.h"     // TI - Board - CMSIS 
 #include "core_cm4.h"           // CMSIS Header
@@ -25,7 +5,7 @@ for(int i = 0; i < NUM_LEDS; i++) {
 #include "GPIO.h"
 #include "Clock.h"
 #include "LED.h"
-#include "Coop_Scheduler.h"
+#include "ViiROS.h"
 #include "Debounce_Switch.h"
 #include <stdint.h>
 
@@ -47,6 +27,28 @@ void BLUE_LED_ON(uint8_t Value){
 }
 
 
+ViiROS_Thread Red;
+uint32_t stack_Red[40];
+
+void Red_t(void)
+{
+  RED_LED_ON(1U);
+  ViiROS_BlockTime(250U);
+  RED_LED_ON(0U);
+  ViiROS_BlockTime(100);
+}
+
+ViiROS_Thread Blue;
+uint32_t stack_Blue[40];
+
+void Blue_t(void)
+{
+  BLUE_LED_ON(1U);
+  ViiROS_BlockTime(400U);
+  BLUE_LED_ON(0U);
+  ViiROS_BlockTime(150);
+}
+
 /****************************** Build Objects  ********************************/
 /* LED Objects - each with its own write function and state */
 LED_t red_LED = {
@@ -63,19 +65,7 @@ LED_t blue_LED = {
 
 
 
-/**************************** Functions for Task-Handling  ********************/
-/**
- * @brief Task function for red LED 
- */
-void redLED(void){
-        LED_toggle(&red_LED); // Toggle the red LED
-}
 
-
-/**
- * @brief Main function - program entry point
- * Initializes hardware and runs the scheduler forever
- */
 int main()
 {
     /* Update the System Clock*/
@@ -90,16 +80,14 @@ int main()
     GPIO_EnablePort(GPIO_PORTF);      // Enable clock for Port F
     
     // Configure GPIO pins
-   
+
     GPIO_ConfigureOutput(GPIO_PORTF, 1U);  // Red LED as output
     GPIO_ConfigureOutput(GPIO_PORTF, 2U);  // Blue LED as output
- 
-    
-    
+      
     // Initialize all LEDs to OFF state
     LED_off(&red_LED);
     LED_off(&blue_LED);
-
+    
     
     
     /* enable interrupts globally after initialization  */
@@ -109,6 +97,6 @@ int main()
     // Main super loop - runs forever
     while(1)
     {
-        
+       
     }
 }

@@ -10,7 +10,7 @@
    -- Core Clock
    ---------------------------------------------------------------------------- */
 
-uint32_t SystemCoreClock = 16000000;  /* Default: 16 MHz after reset */
+uint32_t SystemCoreClock = 16000000U;  /* Default: 16 MHz after reset */
 
 /* ----------------------------------------------------------------------------
    -- SystemInit()
@@ -39,5 +39,5 @@ void SystemCoreClockUpdate (void) {
     /* TODO: Read clock configuration registers and calculate actual frequency.
        For now, just keep default.
      */
-    SystemCoreClock = 16000000;
+    SystemCoreClock = 16000000U;
 }
