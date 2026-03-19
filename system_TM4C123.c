@@ -2,9 +2,9 @@
  * @file     system_TM4C123.c
  * @brief    CMSIS System Initialization for TI Tiva TM4C123
  ******************************************************************************/
-
-#include "system_TM4C123.h"
 #include "TM4C123GH6PM.h"
+#include "system_TM4C123.h"
+
 
 /* ----------------------------------------------------------------------------
    -- Core Clock

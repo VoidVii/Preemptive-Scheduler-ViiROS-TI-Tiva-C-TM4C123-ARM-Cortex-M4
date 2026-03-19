@@ -10,10 +10,11 @@
  * an interrupt when it reaches zero, automatically reloading from
  * the RELOAD register.
  */
-
-#include "SysTick.h"
 #include "TM4C123GH6PM.h"
+#include "core_cm4.h"
+#include "SysTick.h"
 #include "Clock.h"
+#include "ViiROS.h"
 
 /**
  * @brief Initialize the SysTick timer for 1ms interrupts
@@ -106,6 +107,10 @@ void SysTick_Handler(void)
 {
     /* Increment system tick counter (atomic on 32-bit Cortex-M) */
     TickCounter++;
+    __disable_irq();
+    ViiROS_blockWatch();
+    ViiROS_Scheduler();
+    __enable_irq();
 }
 
 /**

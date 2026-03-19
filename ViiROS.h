@@ -1,11 +1,29 @@
 #ifndef VIIROS_H_
 #define VIIROS_H_
 
+/*============================================================================*/
+/*                       Includes & Defines                                   */
+/*============================================================================*/
 #include <stdint.h>
 
 
-typedef void (*ViiROS_ThreadHandler)(void);
+#define NULL 0
 
+/*      
+*       LOG2(x) = 32 - __CLZ(x)
+*       ViiROS_readyMask = 0b0000 0000 0000 0000 0000 0000 0101 0010
+*                            ^ 25 zeros before the first 1  ^
+*
+*       __CLZ(x) = 25 --> 32 - 25 = 7 highest bit and priority 
+*       works for >> x != 0 << and is undefined for x = 0  
+*/
+#define LOG2(x) (32U - __CLZ(x))
+
+/*============================================================================*/
+/*                       Thread Data (TCB, Arrays, etc.)                      */
+/*============================================================================*/
+
+typedef void (*ViiROS_ThreadHandler)(void);
 
 /* @brief Thread Control Block (TCB) */ 
 typedef struct {
@@ -14,6 +32,10 @@ typedef struct {
   uint32_t blocktime; /* time thread spends in blocked state */
   /* space for more thread attributes like state, threadHandler and more */
 }ViiROS_Thread;
+
+/*============================================================================*/
+/*                       Function Declarations                                */
+/*============================================================================*/
 
 /* Idle function  */
 static void ViiROS_onIdle(void);
@@ -34,7 +56,7 @@ void ViiROS_Scheduler(void);
 void ViiROS_BlockTime(uint32_t time);
 
 /* Countwatch  */
-void ViiROS_BlockWatch(void);
+void ViiROS_blockWatch(void);
 
 
 /* ViiROS Thread start */
@@ -46,3 +68,23 @@ void ViiROS_ThreadStart(
 
 
 #endif // VIIROS_H_
+
+//void PendSV_Handler()
+//{ 
+//  void *sp;
+//  
+//  __disable_irq();
+//  
+//  if(ViiROS_current != (ViiROS_Thread *)0)
+//  {
+//    /* push R4 - R11 */ 
+//    ViiROS_current->sp = sp;  
+//  }
+//  
+//  sp = ViiROS_next->sp;
+//  
+//  ViiROS_current = ViiROS_next;
+//  
+//  /* pop R4 - R11 */
+//  __enable_irq(); 
+//}

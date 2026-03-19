@@ -1,19 +1,11 @@
 #include "TM4C123GH6PM.h" /* necessary for core_cm4.h  */
 #include <core_cm4.h> /* for __disable_irq() / __CLZ => portability */
 #include "ViiROS.h"
+#include "GPIO.h"
 
-
-/*      
-*       LOG2(x) = 32 - __CLZ(x)
-*       ViiROS_readyMask = 0b0000 0000 0000 0000 0000 0000 0101 0010
-*                            ^ 25 zeros before the first 1  ^
-*
-*       __CLZ(x) = 25 --> 32 - 25 = 7 highest bit and priority 
-*       works for >> x != 0 << and is undefined for x = 0  
-*/
-#define LOG2(x) (32U - __CLZ(x))
-
-/*§§§§§§§§§§§§§§§§§§§§§§§§§§§ - Declarations - §§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§*/
+/*============================================================================*/
+/*                       Thread Component Declaration                         */
+/*============================================================================*/
 
 /*
 * ViiROS is designed to handle up to 32 threads + 1 idle thread
@@ -32,17 +24,41 @@
 ViiROS_Thread *Active_Thread[33];
 
 /* current thread (modified by PendSV -> volatile) */
-ViiROS_Thread * volatile ViiROS_current;
+ViiROS_Thread * volatile ViiROS_current = NULL;
 
 /* next thread (modified by PendSV -> volatile) */
-ViiROS_Thread * volatile ViiROS_next;
+ViiROS_Thread * volatile ViiROS_next = NULL;
 
 /* Ready thread bitmask – used by LOG2() to find highest ready thread */
-uint32_t ViiROS_readyMask; 
+static volatile uint32_t ViiROS_readyMask = 0U; 
 
 /* Blocked thread bitmask  */
-uint32_t ViiROS_blockedMask;
+static volatile uint32_t ViiROS_blockedMask = 0U;
 
+/*============================================================================*/
+/*                        Idle Thread Declaration                             */
+/*============================================================================*/
+
+ViiROS_Thread Idle;
+static uint32_t stack_Idle[80];
+
+__root static void onIdle(void)
+{
+  while(1){
+   __WFI(); /* Wait for interrupt and sleep until */
+ 
+//   GPIO_WritePin(GPIO_PORTF, 2U, 1U);  // Blaue LED an
+//   for(volatile int i = 0; i < 1000000; i++);  // Kurze Pause
+//   GPIO_WritePin(GPIO_PORTF, 2U, 0U);  // Blaue LED aus
+//   for(volatile int i = 0; i < 1000000; i++);  // Kurze Paus
+  }
+}
+
+/*============================================================================*/
+/*                       Function Declarations                                */
+/*============================================================================*/
+
+/*--------------------------- lastInit() -------------------------------------*/
 /**
 *@brief Last part for further initialization / code before ViiROS takes control
 *
@@ -51,35 +67,22 @@ uint32_t ViiROS_blockedMask;
 */
 __weak void ViiROS_lastInit(void){};
 
-/*§§§§§§§§§§§§§§§§§§§§§§§§§§ - Idle - Thread - §§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§*/
-
-ViiROS_Thread ViiROS_Idle;
-static uint32_t stack_ViiROS_Idle[40];
-
-static void ViiROS_onIdle(void)
-{
-  while(1){
-    __WFI(); /* Wait for interrupt and sleep until */
-  }
-}
-
-
-/*§§§§§§§§§§§§§§§§§§§§§§§§§§§ - Functions - §§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§*/
-
+/*----------------------------- Init() ---------------------------------------*/
 void ViiROS_Init()
 {
   /* Set PendSV priority to the lowest */
   NVIC_SetPriority(PendSV_IRQn, 0xFFU);
   
   
-  ViiROS_ThreadStart(&ViiROS_Idle, 
-                     ViiROS_onIdle, 
+  ViiROS_ThreadStart(&Idle, 
+                     onIdle, 
                      0U, 
-                     stack_ViiROS_Idle, sizeof(stack_ViiROS_Idle));
-  
-  
-  ViiROS_current = Active_Thread[0];
+                     stack_Idle, sizeof(stack_Idle));
+ 
+  ViiROS_current = NULL;
 }
+
+/*----------------------------- Scheduler ------------------------------------*/
 
 void ViiROS_Scheduler(void)
 {
@@ -88,15 +91,13 @@ void ViiROS_Scheduler(void)
   
   if(ViiROS_readyMask == 0U) /* no thread ready = idle */
   {
-    ViiROS_next = Active_Thread[0];
+    next = Active_Thread[0];
   }
   else 
   {
     uint32_t highPrio = LOG2(ViiROS_readyMask); /* ready highest prio */
     next = Active_Thread[highPrio];
   }
-  
-  
   
   if(current != next)
   {
@@ -106,40 +107,48 @@ void ViiROS_Scheduler(void)
   } 
 }
 
+/*------------------------------ Run() ---------------------------------------*/
+
 void ViiROS_Run(void)
 {
   /* last configurations before ViiROS takes over */
-  ViiROS_lastInit(); /* Add here individual code e. g. Switch interrupt,...  */
+  //ViiROS_lastInit(); /* Add here individual code e. g. Switch interrupt,...  */
   
   __disable_irq();
   /* Give up control to ViiROS */
+  //ViiROS_current = Active_Thread[0];
   ViiROS_Scheduler();
   
   __enable_irq();
+  
+  while(1){
+    __WFI();
+  }
 }
+/*----------------------------- BlockTime() ----------------------------------*/
 
 /**
 *@warning Call in idle thread is forbidden!
 */
 void ViiROS_BlockTime(uint32_t time)
 {  
+  uint32_t current_bit;
+  __disable_irq();
+  
   if(ViiROS_current != Active_Thread[0])
   {
-    uint32_t current_bit;
     current_bit = 1U << (ViiROS_current->priority - 1U);
-    
-    __disable_irq();
     
     ViiROS_current->blocktime = time;
     ViiROS_readyMask &= ~current_bit;
     ViiROS_blockedMask |= current_bit;
     
     ViiROS_Scheduler();
-    
-    __enable_irq();
   }
-  
+  __enable_irq();
 }
+
+/*----------------------------- blockWatch() ---------------------------------*/
 
 /**
 *@brief blockWatch manages the block time of every blocked thread
@@ -152,8 +161,6 @@ void ViiROS_blockWatch(void)
   if(ViiROS_blockedMask != 0U)
   {
     uint32_t watchSet = ViiROS_blockedMask;
-    
-    __disable_irq();
     
     while (watchSet != 0U)
     {
@@ -171,9 +178,11 @@ void ViiROS_blockWatch(void)
         ViiROS_readyMask |= watchBit;
       }
     }
-    __enable_irq();
+    
   }
 }
+
+/*----------------------------- ThreadStart() --------------------------------*/
 
 /**
 *@brief Creates threads including fabricated initial hard- and software stack
@@ -215,32 +224,35 @@ void ViiROS_ThreadStart(
   /* Check if priority is in range and not already taken */
   if (priority <= 32 &&
       Active_Thread[priority] == (ViiROS_Thread*)0){
-        
+      
       /*  
         Setup the sp to the top of the stack of the thread.
         AAPCS (Procedure Call Standard): 8-Byte-alignment on ARM Cortex-M4    
       */
         
-      uint32_t *sp = (uint32_t *)((((uint32_t)stk_Storage + stk_Size) / 8 ) * 8);
+      uint32_t *sp = (uint32_t *)((((uint32_t)stk_Storage + stk_Size)/8)*8);
+      /* 
+        Other method for 8-byte-alignment:
+        sp = (uint32_t *)((uint32_t)sp & ~7);  // 8-Byte-Alignment */
       
       /* hardware stack frame */
       *--sp = (1U << 24);        /* xPSR (Thumb-Bit = 1 if 0 = HardFault)*/
       *--sp = (uint32_t)thread_Handler; /* PC – entry point */
       *--sp = 0xFFFFFFFD;        /* LR = 0xFFFFFFFD => EXC_RETURN */
-      *--sp = 0x0000000C;        /* R12 */
-      *--sp = 0x00000003;        /* R3 */
-      *--sp = 0x00000002;        /* R2 */
-      *--sp = 0x00000001;        /* R1 */
-      *--sp = 0x00000000;        /* R0 */  
+      *--sp = 0xCAFECAFE;        /* R12 */
+      *--sp = 0xCAFECAFE;        /* R3 */
+      *--sp = 0xCAFEBABE;        /* R2 */
+      *--sp = 0xCAFEBABE;        /* R1 */
+      *--sp = 0xCAFEBABE;        /* R0 */  
       /* software stack frame */
-      *--sp = 0x0000000B;        /* R11 */
-      *--sp = 0x0000000A;        /* R10 */
-      *--sp = 0x00000009;        /* R9 */
-      *--sp = 0x00000008;        /* R8 */
-      *--sp = 0x00000007;        /* R7 */
-      *--sp = 0x00000006;        /* R6 */
-      *--sp = 0x00000005;        /* R5 */
-      *--sp = 0x00000004;        /* R4 */
+      *--sp = 0xCAFEBABE;        /* R11 */
+      *--sp = 0xCAFEBABE;        /* R10 */
+      *--sp = 0xCAFEBABE;        /* R9 */
+      *--sp = 0xCAFEBABE;        /* R8 */
+      *--sp = 0xCAFEBABE;        /* R7 */
+      *--sp = 0xCAFEBABE;        /* R6 */
+      *--sp = 0xCAFEBABE;        /* R5 */
+      *--sp = 0xCAFEBABE;        /* R4 */
       
       me->sp = sp;
 
@@ -257,24 +269,56 @@ void ViiROS_ThreadStart(
   }    
 } 
 
+/*----------------------------- PendSV_Handler() -----------------------------*/
 
-void PendSV_Handler()
-{ 
-  void *sp;
+__stackless void PendSV_Handler(void)
+{
+  __asm volatile(
   
-  __disable_irq();
-  
-  if(ViiROS_current != (ViiROS_Thread *)0)
-  {
-    sp = ViiROS_current;
-    /* Save R4 - R11 */ 
-    ViiROS_current->sp = sp;  
-  }
-  
-  sp = ViiROS_next->sp;
-  
-  ViiROS_current = ViiROS_next;
-  
-  /* retrief R4 - R11 */
-  __enable_irq(); 
+        /*__disable_irq();*/
+       " CPSID     i                    \n"
+        /*if (ViiROS_current != 0) */
+       " LDR.N     R2, =ViiROS_current   \n"
+       " LDR       R0, [R2]              \n"
+       " CMP       R0, #0                \n"
+       " BEQ       PendSV_restore        \n"   
+         
+        /* save R4 - R11 on stack */  
+       " PUSH      {r4-r11}              \n"
+        /* ViiROS_current->sp = sp; */
+       " LDR       R0, [R2]              \n"     
+       " MOV       R1, SP                \n"
+       " STR       R1, [R0]              \n"
+       /* sp = ViiROS_next->sp; */
+       "PendSV_restore:                 \n"
+       " LDR.N     R1, =ViiROS_next      \n"
+       " LDR       R0, [R1]              \n"
+       " LDR       SP, [R0]              \n"
+        /* ViiROS_current = ViiROS_next; */
+       " LDR       R0, [R1]              \n"
+       " STR       R0, [R2]              \n"
+        /* Restore R4 - R11 */
+       " POP       {r4-r11}              \n"
+        /* __enable_irq(); */
+       " CPSIE     i                     \n"
+       " BX        LR                    \n"
+  );
 }
+
+//    uint32_t *sp;
+//    __disable_irq();
+//
+//    if (ViiROS_current != 0)
+//    {
+//        //"PUSH {r4-r11}")
+//        ViiROS_current->sp = sp;
+//    }
+//
+//    sp = ViiROS_next->sp;
+//
+//    ViiROS_current = ViiROS_next;
+//
+//    //"POP {r4-r11}"
+//  
+//    __enable_irq();
+//}
