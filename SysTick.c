@@ -13,8 +13,26 @@
 #include "TM4C123GH6PM.h"
 #include "core_cm4.h"
 #include "SysTick.h"
-#include "Clock.h"
+#include "system_TM4C123.h"
 #include "ViiROS.h"
+
+uint32_t SysTick_Reload_Value(void)
+{
+    /**
+     * Calculate reload value for 1ms period
+     * 
+     * Formula: Reload = (Clock_Hz / 1000) - 1
+     * 
+     * Example with 16 MHz:
+     * (16,000,000 / 1000) - 1 = 16,000 - 1 = 15,999
+     * 
+     * The timer counts 16,000 cycles (from 15999 down to 0) at 16 MHz,
+     * taking exactly 1ms (16,000 / 16,000,000 = 0.001 seconds).
+     */
+    uint32_t SysTick_Reload = (SystemCoreClock / 1000U) - 1U;
+    
+    return SysTick_Reload;
+}
 
 /**
  * @brief Initialize the SysTick timer for 1ms interrupts
@@ -29,37 +47,20 @@
  * - Automatically reloads from RELOAD register
  * - Stops when processor is halted for debugging
  * 
- * Register overview:
- * - STCTRL (0xE000E010): Control and status
- * - STRELOAD (0xE000E014): Reload value
- * - STCURRENT (0xE000E018): Current counter value
- * 
  * @note Must be called before using any time-related functions
  * @note System clock must be configured before calling this
  * 
- * @see SysTick_Reload_Value() Calculates reload value based on clock
+ * @see SysTick_Reload_Value() (system_TM4C123.c) Calculates reload value based on clock
  * @see GetTickCounter() for reading the current tick count
  */
 void SysTick_Init(void)
 {
     /* Disable SysTick during configuration to prevent unexpected interrupts */
-    //NVIC_ST_CTRL_R = 0U;
     SysTick->CTRL = 0U;
     
     /* Clear current value (write any value to reset) */
-    //NVIC_ST_CURRENT_R = 0U;
     SysTick->VAL = 0U;
     
-    /**
-     * Set reload value for 1ms period
-     * 
-     * Calculation: RELOAD = (SystemClock / 1000) - 1
-     * Example with 16MHz clock: (16,000,000 / 1000) - 1 = 15,999
-     * 
-     * The SysTick_Reload_Value() function automatically calculates
-     * the correct value based on the actual system clock.
-     */
-    //NVIC_ST_RELOAD_R = SysTick_Reload_Value();
     SysTick->LOAD = SysTick_Reload_Value();
     
     /**
@@ -68,10 +69,9 @@ void SysTick_Init(void)
      * Bit 1: Enable interrupt (INTEN)
      * Bit 2: Clock source - System clock (CLK_SRC)
      */
-   // NVIC_ST_CTRL_R = 0x07;  /* Binary 111 = all three bits set */
-    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk |
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | 
+                    SysTick_CTRL_TICKINT_Msk |
                     SysTick_CTRL_ENABLE_Msk;
-    
 }
 
 /**
@@ -80,14 +80,9 @@ void SysTick_Init(void)
  * This static volatile variable holds the number of milliseconds
  * since system startup. It's incremented every 1ms in the SysTick
  * interrupt handler.
- * 
- * - 32-bit width allows for 49.7 days of uptime before overflow
+ *
  * - volatile prevents compiler optimizations (changed in interrupt)
  * - static limits scope to this file
- * 
- * Overflow behavior: After reaching 0xFFFFFFFF, the next increment
- * wraps to 0. Subtraction operations handle this gracefully due to
- * unsigned arithmetic modulo 2^32.
  */
 static volatile uint32_t TickCounter;
 
@@ -105,33 +100,18 @@ static volatile uint32_t TickCounter;
  */
 void SysTick_Handler(void)
 {
-    /* Increment system tick counter (atomic on 32-bit Cortex-M) */
-    TickCounter++;
+    TickCounter++; /* As long as only SysTick has access its safe */
+    
     __disable_irq();
-    ViiROS_blockWatch();
+    
+    ViiROS_BlockWatch();
     ViiROS_Scheduler();
+    
     __enable_irq();
 }
 
 /**
  * @brief Get the current system tick count
- * 
- * Returns the number of milliseconds elapsed since system startup.
- * The counter is incremented every 1ms in the SysTick interrupt.
- * 
- * @return Current tick count in milliseconds
- * 
- * @note Value wraps around after 49.7 days (2^32 ms)
- * @note Subtraction operations are safe across overflow
- * 
- * @see SysTick_Init() Must be called first
- * 
- * Usage example:
- * @code
- * uint32_t start = GetTickCounter();
- * // do something
- * uint32_t elapsed = GetTickCounter() - start;  // Safe even with overflow
- * @endcode
  */
 uint32_t GetTickCounter(void)
 {

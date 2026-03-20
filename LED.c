@@ -109,7 +109,6 @@ void LED_off(LED_t *LED_t)
  * @param LED_t Pointer to the LED object to toggle
  * 
  * @note Uses currentState for decision, not hardware read
- * @note Equivalent to: if(on) off(); else on();
  * 
  * @see LED_on()
  * @see LED_off()

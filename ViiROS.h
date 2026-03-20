@@ -25,13 +25,19 @@
 
 typedef void (*ViiROS_ThreadHandler)(void);
 
-/* @brief Thread Control Block (TCB) */ 
+/**
+*@brief Thread Control Block (TCB)
+*@{
+*/
 typedef struct {
-  void *sp; /* thread stack pointer // top of the stack */
-  uint8_t priority; /* thread priority */
-  uint32_t blocktime; /* time thread spends in blocked state */
+  void *sp; /**<thread stack pointer // top of the stack */
+  uint8_t priority; /**<thread priority */
+  uint32_t blocktime; /**<time thread spends in blocked state */
   /* space for more thread attributes like state, threadHandler and more */
 }ViiROS_Thread;
+/**
+*@}
+*/
 
 /*============================================================================*/
 /*                       Function Declarations                                */
@@ -56,10 +62,10 @@ void ViiROS_Scheduler(void);
 void ViiROS_BlockTime(uint32_t time);
 
 /* Countwatch  */
-void ViiROS_blockWatch(void);
+void ViiROS_BlockWatch(void);
 
 
-/* ViiROS Thread start */
+
 void ViiROS_ThreadStart(
                         ViiROS_Thread *me,
                         ViiROS_ThreadHandler thread_Handler,
@@ -68,23 +74,3 @@ void ViiROS_ThreadStart(
 
 
 #endif // VIIROS_H_
-
-//void PendSV_Handler()
-//{ 
-//  void *sp;
-//  
-//  __disable_irq();
-//  
-//  if(ViiROS_current != (ViiROS_Thread *)0)
-//  {
-//    /* push R4 - R11 */ 
-//    ViiROS_current->sp = sp;  
-//  }
-//  
-//  sp = ViiROS_next->sp;
-//  
-//  ViiROS_current = ViiROS_next;
-//  
-//  /* pop R4 - R11 */
-//  __enable_irq(); 
-//}

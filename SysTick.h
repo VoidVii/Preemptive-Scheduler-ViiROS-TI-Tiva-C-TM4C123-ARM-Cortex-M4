@@ -12,6 +12,16 @@
 #include <stdint.h>
 
 /**
+ * @brief Calculate SysTick reload value for 1ms period
+ * 
+ * @return 24-bit reload value for SysTick timer
+ * 
+ * @note Result = (SystemCoreClock / 1000) - 1
+ * @see SysTick_Init() uses this value
+ */
+uint32_t SysTick_Reload_Value(void);
+
+/**
  * @brief Initialize SysTick timer for 1ms interrupts
  * 
  * Configures the SysTick timer to generate an interrupt every 1ms.

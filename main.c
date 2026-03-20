@@ -4,7 +4,7 @@
 #include "SysTick.h"
 #include "GPIO.h"
 #include "ViiROS.h"
-#include <stdint.h>
+
 
 
 /*============================================================================*/
@@ -47,28 +47,26 @@ void Green_t(void)
 
 int main()
 {
-    /* Update the System Clock*/
+    /* Update the System Clock */
     SystemCoreClockUpdate(); 
     
     /* defensive initialization by disabling interrupts globally */
     __disable_irq();
     
-    // Initialize system modules
+    /* SysTick - Initialization */
     SysTick_Init();
     
-    
+    /* GPIO - Initialization */
     GPIO_EnablePort(GPIO_PORTF);      // Enable clock for Port F
-    
-    // Configure GPIO pins
 
     GPIO_ConfigureOutput(GPIO_PORTF, 1U);  // Red LED as output
-    GPIO_ConfigureOutput(GPIO_PORTF, 2U);  // Blue LED as output
-    GPIO_ConfigureOutput(GPIO_PORTF, 3U);
+    GPIO_ConfigureOutput(GPIO_PORTF, 3U);  // Blue LED as output
+    
     GPIO_WritePin(5U, 1U, 0U);
-    GPIO_WritePin(5U, 2U, 0U);
     GPIO_WritePin(5U, 3U, 0U);
     
-   ViiROS_Init();
+    /* ViiROS - Initialization */
+    ViiROS_Init();
     
     ViiROS_ThreadStart(&Red,
                        Red_t,
@@ -80,9 +78,10 @@ int main()
                        7U,
                        stack_Green, sizeof(stack_Green));
 
-    
+    /* enable interrups after initialiaztion */
     __enable_irq();
-
+    
+    /* give up controll to ViiROS -> MSP --> PSP */
     ViiROS_Run();
 
 }

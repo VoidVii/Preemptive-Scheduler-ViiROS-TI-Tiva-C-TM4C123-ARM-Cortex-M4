@@ -1,5 +1,5 @@
-/**************************************************************************//**
- * @file     system_LM4F.h
+/******************************************************************************
+ * @file     system_TM4C123.h
  * @brief    CMSIS Cortex-M4 Device Peripheral Access Layer Header File for
  *           TI Tiva TM4C123 Class Devices
  * @version  V3.1
@@ -32,7 +32,7 @@ extern "C" {
 
 #include <stdint.h>
 
-extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock)  */
+extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock) */
 
 
 /**
