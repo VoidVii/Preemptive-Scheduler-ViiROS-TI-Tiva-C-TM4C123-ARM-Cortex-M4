@@ -3,8 +3,7 @@ Ein minimaler, präemptiver Echtzeitkernel entwickelt auf dem Tiva C Series Laun
 
 Entwickelt als Lernprojekt für RTOS-Konzepte unter Anwendung der erworbenen Kenntnisse aus Modern Embedded Systems Programming Course von Miro Samec (Quantum Leaps).
 
-Das System nutzt den SysTick als Zeitbasis von 1 ms und läuft auf dem PSP (Process Stack Pointer) statt auf dem MSP (Main Stack Pointer).
-Soabld ViiROS die Kontrolle über das System hat wird der MSP nicht mehr verwendet. 
+Das System nutzt den SysTick als Zeitbasis von 1 ms. Sobald ViiROS die Kontrolle über das System hat, wird der MSP (Main Stack Pointer) nur noch für das Interrupt-Handling verwendet – alle Threads laufen auf dem PSP (Process Stack Pointer)
 
 
 ## Tiva C Series LaunchPad TM4C123GXL (TM4C123GH6PM)
@@ -52,6 +51,7 @@ Quelle: https://www.ti.com/tool/EK-TM4C123GXL
 
 
 ## Logic Analyzer View - Folgt noch um die präemptive Wirkungsweise zu beweisen!
+### PulseView software from sigrok.org 
 
 
 ## Architektur
@@ -164,13 +164,26 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 Normal bei RTOS: Threads laufen auf PSP, nicht auf CSTACK.
 
 
+# Präemptiver RTOS-Kernel für ARM Cortex-M4 (TM4C123)
+- Entwicklung eines vollständigen präemptiven Echtzeitkernels von Grund auf in C und Assembler
+
+- Bitmask-basiertes Scheduling mit O(1)-Prioritätssuche durch LOG2(x) = 32 - __CLZ(x)
+
+- Blocking-Mechanismus (BlockTime/BlockWatch) für zeitgesteuerte Threads (1 ms Auflösung)
+
+- Kontextwechsel in Assembler (PendSV) mit niedrigster Interrupt-Priorität – sichert/stellt r4-r11 und wechselt zwischen MSP und PSP
+
+- Stack-Management nach AAPCS: 8-Byte-Alignment, Magic Numbers (0xCAFEBABE) zur Erkennung von Stack-Overflows
+
+- Doxygen-Dokumentation
+
 # Entwicklungshinweis
 Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf.
 Ziel des Projekts war es, die Funktionsweise und Besonderheiten eines preemptiven System zu erlernen und umzusetzen.
 Bei der Umsetzung habe ich meinen Wissen, dass ich im Modern Embedded Systems Programming Course von Miro Samec (Quantum Leaps) erwerben durfte, eingesetzt und vertieft.
 
 ## Die größten Herausforderungen dabei waren:
-### Stack-Korruption durch falsche Initialiesrung von Current-Thread (ViiROS_curennt):
+### Stack-Korruption durch falsche Initialisierung von Current-Thread (ViiROS_current):
   - Problem: ViiROS_current = Idle-Thread vor erstem Context Switch
   - Folge:   PSP (Process Stack Pointer) im Idle-TCB wurde mit MSP (Main Stack Pointer) im PendSV_Handler überschrieben.
            Sobald der Idle-Thread an der Reihe war führte der MSP wieder zurück in main() und beendete das System.
@@ -178,7 +191,7 @@ Bei der Umsetzung habe ich meinen Wissen, dass ich im Modern Embedded Systems Pr
 ### Stack Overflow durch zu kleine Thread-Stacks:
   - Problem:  Stackgröße für die einzelnen Threads zu klein gewählt. Der Stack wuchs in den Bereich des Arrays der aktiven Threads (Active_Thread[]).
   - Folge:    Array-Einträge wurden überschrieben und gestartete Threads zerstört.
-  - Lösung:   Zu kleine Größe wurde mit hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße Schrittweise erhöht.
+  - Lösung:   Zu kleine Größe wurde mit hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße schrittweise erhöht.
 ### Hard Faults durch nicht initialisierte GPIO-Pins
   - Problem:  Ein Thread hat auf nicht initialisierte GPIO Pins zugegriffen.
   - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
@@ -197,8 +210,6 @@ Bei der Umsetzung habe ich meinen Wissen, dass ich im Modern Embedded Systems Pr
 - Architekturdiagramm (aus meinem Code generiert)
 
 **Der gesamte Code, das Debugging, die Architekturentscheidungen und die finale Implementierung stammen von mir.**
-
-
 
 # Build info
 - IAR Embedded Workbench (Arm)
