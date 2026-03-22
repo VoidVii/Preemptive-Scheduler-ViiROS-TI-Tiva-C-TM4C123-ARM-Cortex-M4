@@ -2,6 +2,20 @@
 Ein minimaler, präemptiver Echtzeitkernel für den TI Tiva TM4C123 (ARM Cortex-M4).
 Entwickelt als Lernprojekt für RTOS-Konzepte.
 
+                    SysTick (1 ms)
+                         │
+                    BlockWatch
+                    (dekrementiert blocktime,
+                     setzt readyMask/blockedMask)
+                         │
+                    Scheduler
+                    (LOG2(readyMask) → höchste Prio)
+                         │
+                    PendSV
+                    (Context Switch)
+                         │
+                    Thread läuft auf PSP
+
 ## Architektur
 
 Das folgende Diagramm wurde aus meinem Code in `ViiROS.c` abgeleitet und mit Hilfe einer KI visualisiert.
@@ -10,13 +24,13 @@ Das folgende Diagramm wurde aus meinem Code in `ViiROS.c` abgeleitet und mit Hil
     │                              MAIN                                           │
     │  SystemCoreClockUpdate → __disable_irq → SysTick_Init → GPIO_Init           │
     │  → ViiROS_Init (startet Idle-Thread, setzt ViiROS_current = NULL)           │
-    │  → __enable_irq → ViiROS_Run()                                              │
+    │  → ViiROS_ThreadStart() → __enable_irq → ViiROS_Run()                       │
     └─────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
     ┌─────────────────────────────────────────────────────────────────────────────┐
     │                         ViiROS_Run()                                        │
-    │  ViiROS_lastInit() → __disable_irq → ViiROS_Scheduler() → __enable_irq      │
+    │   __disable_irq → ViiROS_lastInit() → ViiROS_Scheduler() → __enable_irq     │
     │  (kehrt nie zurück)                                                         │
     └─────────────────────────────────────────────────────────────────────────────┘
                                           │
