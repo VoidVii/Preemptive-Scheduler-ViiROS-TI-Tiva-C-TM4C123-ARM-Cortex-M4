@@ -1,6 +1,32 @@
 # Preemptive Scheduler ViiROS for ARM Cortex-M4
-Ein minimaler, präemptiver Echtzeitkernel für den TI Tiva TM4C123 (ARM Cortex-M4).
+Ein minimaler, präemptiver Echtzeitkernel für Tiva C Series LaunchPad TM4C123GXL (TM4C123GH6PM - ARM Cortex-M4).
+
 Entwickelt als Lernprojekt für RTOS-Konzepte.
+    
+## Scheduler
+    void ViiROS_Scheduler(void)
+    {
+      ViiROS_Thread *current = ViiROS_current;
+      ViiROS_Thread *next;
+      
+      if(ViiROS_readyMask == 0U) /**< no thread ready = idle */
+      {
+        next = Active_Thread[0];
+      }
+      else 
+      {
+        uint32_t highPrio = LOG2(ViiROS_readyMask); /**< highest ready prio */
+        next = Active_Thread[highPrio];
+      }
+      
+      if(current != next)
+      {
+        ViiROS_next = next;
+        SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
+      } 
+    }
+
+## Periodischer Ablauf:
 
                     SysTick (1 ms)
                          │
@@ -15,6 +41,10 @@ Entwickelt als Lernprojekt für RTOS-Konzepte.
                     (Context Switch)
                          │
                     Thread läuft auf PSP
+
+
+## Logic Analyzer View - Folgt noch um die präemptive Wirkungsweise zu beweisen!
+
 
 ## Architektur
 
@@ -132,26 +162,26 @@ Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Coope
 Ziel des Projekts war es, die Funktionsweise und Besonderheiten eines preemptiven System zu erlernen und umzusetzen.
 Bei der Umsetzung habe ich meinen Wissen, dass ich im Modern Embedded Systems Programming Course von Miro Samec (Quantum Leaps) erwerben durfte, eingesetzt und vertieft.
 
-Die größten Herausforderungen dabei waren:
-  - Stack-Korruption durch falsche Initialiesrung von Current-Thread (ViiROS_curennt):
-    - Problem: ViiROS_current = Idle-Thread vor erstem Context Switch
-    - Folge:   PSP (Process Stack Pointer) im Idle-TCB wurde mit MSP (Main Stack Pointer) im PendSV_Handler überschrieben.
-             Sobald der Idle-Thread an der Reihe war führte der MSP wieder zurück in main() und beendete das System.
-    - Lösung:  ViiROS_current = NULL, somit wurde der Wechsel von MSP zu PSP sichergestellt
-  - Stack Overflow durch zu kleine Thread-Stacks:
-    - Problem:  Stackgröße für die einzelnen Threads zu klein gewählt. Der Stack wuchs in den Bereich des Arrays der aktiven Threads (Active_Thread[]).
-    - Folge:    Array-Einträge wurden überschrieben und gestartete Threads zerstört.
-    - Lösung:   Zu kleine Größe wurde mit hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße Schrittweise erhöht.
-  - Hard Faults durch nicht initialisierte GPIO-Pins
-    - Problem:  Ein Thread hat auf nicht initialisierte GPIO Pins zugegriffen.
-    - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
-    - Lösung:   In main() die GPIO Konfiguration ergänzen.
-  - CSTACK-Warnung im Debugger (kein echter Fehler, aber verwirrend)
-    - Problem:  IAR zeigte: "Stack pointer is outside stack range". Der Debugger zeigte den PSP (Process Stack Pointer) an, der außerhalb von CSTACK liegt.
-    - Folge:    Verunsicherung, ob das System korrekt läuft.
-    - Lösung:   Verstehen, dass ViiROS eigene Stacks erstellt und auf eigenen PSP läuft, der nicht im CSTACK liegt.
+## Die größten Herausforderungen dabei waren:
+### Stack-Korruption durch falsche Initialiesrung von Current-Thread (ViiROS_curennt):
+  - Problem: ViiROS_current = Idle-Thread vor erstem Context Switch
+  - Folge:   PSP (Process Stack Pointer) im Idle-TCB wurde mit MSP (Main Stack Pointer) im PendSV_Handler überschrieben.
+           Sobald der Idle-Thread an der Reihe war führte der MSP wieder zurück in main() und beendete das System.
+  - Lösung:  ViiROS_current = NULL, somit wurde der Wechsel von MSP zu PSP sichergestellt
+### Stack Overflow durch zu kleine Thread-Stacks:
+  - Problem:  Stackgröße für die einzelnen Threads zu klein gewählt. Der Stack wuchs in den Bereich des Arrays der aktiven Threads (Active_Thread[]).
+  - Folge:    Array-Einträge wurden überschrieben und gestartete Threads zerstört.
+  - Lösung:   Zu kleine Größe wurde mit hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße Schrittweise erhöht.
+### Hard Faults durch nicht initialisierte GPIO-Pins
+  - Problem:  Ein Thread hat auf nicht initialisierte GPIO Pins zugegriffen.
+  - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
+  - Lösung:   In main() die GPIO Konfiguration ergänzen.
+### CSTACK-Warnung im Debugger (kein echter Fehler, aber verwirrend)
+  - Problem:  IAR zeigte: "Stack pointer is outside stack range". Der Debugger zeigte den PSP (Process Stack Pointer) an, der außerhalb von CSTACK liegt.
+  - Folge:    Verunsicherung, ob das System korrekt läuft.
+  - Lösung:   Verstehen, dass ViiROS eigene Stacks erstellt und auf eigenen PSP läuft, der nicht im CSTACK liegt.
 
-**KI-Unterstützung:**
+## KI-Unterstützung:
 - Informationssuche
 - Wissensvermittlung & Verständnis
 - Kritik & Bewertung von Lösungen
