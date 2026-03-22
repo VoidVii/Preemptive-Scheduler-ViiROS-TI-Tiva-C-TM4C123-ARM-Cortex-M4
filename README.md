@@ -2,6 +2,11 @@
 Ein minimaler, präemptiver Echtzeitkernel für den TI Tiva TM4C123 (ARM Cortex-M4).
 Entwickelt als Lernprojekt für RTOS-Konzepte.
 
+# ViiROS - Funktionsweise 
+<img width="3147" height="5511" alt="deepseek_mermaid_20260322_2fd92a" src="https://github.com/user-attachments/assets/4e60c7c8-3fd4-4cf6-ad05-aeb0792d5434" />
+
+
+
 # Allgemeine Hinweise zum Starten des Systems
 ViiROS kann mit bis zu 32 Threads verschiedener Prioritäten arbeiten. 
 Das System nutzt den SysTick als Zeitbasis von 1 ms und den PSP (Process Stack Pointer) nicht auf dem MSP (Main Stack Pointer).
