@@ -174,9 +174,13 @@ Normal bei RTOS: Threads laufen auf PSP, nicht auf CSTACK.
 - Doxygen-Dokumentation
 
 # Entwicklungshinweis
+Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems Programming Course** von **Miro Samec (Quantum Leaps)** auf, den ich intensiv studiert habe.  
+Die dort vermittelten Prinzipien – insbesondere zu präemptivem Scheduling, PendSV, Stack-Management und RTOS-Interna – habe ich verstanden und in eine **eigene, eigenständige Implementierung** überführt.
+
+Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Hardware (TM4C123) sowie meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
+
 Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf.
 Ziel des Projekts war es, die Funktionsweise und Besonderheiten eines preemptiven System zu erlernen und umzusetzen.
-Bei der Umsetzung habe ich meinen Wissen, dass ich im Modern Embedded Systems Programming Course von Miro Samec (Quantum Leaps) erwerben durfte, eingesetzt und vertieft.
 
 ## Die größten Herausforderungen dabei waren:
 ### Stack-Korruption durch falsche Initialisierung von Current-Thread (ViiROS_current):
