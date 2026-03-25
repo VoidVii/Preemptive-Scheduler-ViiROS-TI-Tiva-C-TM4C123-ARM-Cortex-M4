@@ -1,54 +1,58 @@
 # Preemptive Kernel ViiROS auf ARM Cortex-M4 (TM4C123GH6PM)
 Präemtives Mini-RTOS (Real-Time Operating System) für ARM Cortex-M.
-Mit klassischem ARM Cortex-M Context Switch über PendSV, fabrizierten Thread-Stacks und zeit- u. prioritätbasiertem O(1)-Scheduling über SysTick. 
-
-## Überblick
-Dieses Projekt hatte das Ziel theoretische Grundkenntise in Embedded-C, Low-Level Embedded Systems und RTOS praxisnah anzuwenden und auszubauen.
-Es baut auf dem vorherigen Projekt "Kooperativer Scheduler" auf und taucht tief in die Prinzipien eines RTOS ein.
-Dabei wurde von grundauf ein System aufgebaut mit folgenden Features:
-	- Kernel / Scheduler:
-		- Präemtiver Scheduler
-		- Prioritätenbasiert (mit Bitmasken für ready/blocked + CLZ() -> O(1))
-
-	- Thread-System
-		- Thread Control Blocks (TCB)
-		- Stack pro Thread
-		- fabrizierter Inital-Stack (aufgebaut als wäre Thread vom Interrupt unterbochen)
-		- Parallele Ausführung (Multitasking-System)
-
-	- Timing & Blocking
-
-	- Kontextwechsel (Context Switch):
-		- PendSV als Context Swtich Interrupt in assambly
-		- Manuelles Sichern/Laden der Calle Save Register (R4-R11)
-		- Manuelles PSP setzen
-
-	- CPU-Modus-Handling:
-		- Wechsel:
-			- von Handler Mode zu Thread Mode
-			- MSP (Main Stack Pointer) für Interrupts
-			- PSP (Process Stack pointer) für Threads
-		- Nutzung von:
-			- Spacial Register CONTROL (= 0x02 -> SPSEL; Umschalten von MSP -> PSP)
-			- EXC_RETURN 0xFFFFFFFD (Scheduler returns from Interrupt into thread)
-
-	- 
-
-
-
-Ein minimaler, präemptiver Echtzeitkernel entwickelt auf dem Tiva C Series LaunchPad TM4C123GXL (TM4C123GH6PM - ARM Cortex-M4).
-
-
-
-
-Entwickelt als Lernprojekt für RTOS-Konzepte unter Anwendung der erworbenen Kenntnisse aus Modern Embedded Systems Programming Course von Miro Samec (Quantum Leaps).
-
-Das System nutzt den SysTick als Zeitbasis von 1 ms. Sobald ViiROS die Kontrolle über das System hat, wird der MSP (Main Stack Pointer) nur noch für das Interrupt-Handling verwendet – alle Threads laufen auf dem PSP (Process Stack Pointer)
-
+Mit klassischem ARM Cortex-M Context Switch über PendSV, fabrizierten Thread-Stacks, zeit- u. prioritätbasiertem Scheduling über SysTick. 
 
 ## Tiva C Series LaunchPad TM4C123GXL (TM4C123GH6PM)
 <img width="400" height="360" alt="grafik" src="https://github.com/user-attachments/assets/1c4a9de0-9fca-4949-b539-c2568f10de35" />
 Quelle: https://www.ti.com/tool/EK-TM4C123GXL
+
+## Überblick
+Das System nutzt den SysTick als Zeitbasis von 1 ms. Sobald ViiROS die Kontrolle über das System hat, wird der MSP (Main Stack Pointer) nur noch für das Interrupt-Handling verwendet – alle Threads laufen auf dem PSP (Process Stack Pointer).
+
+## Features:
+
+- Thread-System
+	- Thread Control Blocks (TCB)
+	- Stack pro Thread
+	- fabrizierter Inital-Stack (aufgebaut als wäre Thread vom Interrupt unterbochen)
+	- Parallele Ausführung (Multitasking-System)
+
+- Kernel / Scheduler:
+	- Präemtiver Scheduler
+	- Prioritätenbasiert 
+	- Bitmasken (32 Bit -> 32 Prioritäten) mit (32 - CLZ) (count leading zeros) -> O(1):
+		- readyMask    	0b01000000000000000000000100000000 (Prio 31, 9 ready)
+		- blockedMask  	0b00000000000000000000000000100001 (Prio 6, 1 blocked)
+
+- Timing & Blocking
+	- SysTick 1ms Zeitbasis
+	- ViiROS_BlockTime() -> Block Threads
+	- BlockWatch() -> Blocktime Management, Unblock Threads
+
+- Kontextwechsel (Context Switch):
+	- PendSV als Context Swtich Interrupt in assambly
+	- Manuelles Sichern/Laden der Calle Save Register (R4-R11) auf/vom PSP
+	- Manuelles PSP setzen
+
+- CPU-Modus-Handling:
+	- Handler Mode u. Thread Mode
+	- MSP (Main Stack Pointer) für Interrupts
+	- PSP (Process Stack pointer) für Threads
+	- Spacial Register CONTROL (= 0x02 -> SPSEL; Umschalten von MSP -> PSP)
+	- EXC_RETURN 0xFFFFFFFD (Scheduler returns from Interrupt into thread)
+
+## Periodischer Ablauf:
+
+	SysTick (1 ms)
+	      |
+	BlockWatch (dekrementiert blocktime, set/clear readyMask/blockedMask)
+	      │
+	Scheduler (LOG2(readyMask) → höchste Prio)
+	      │
+	PendSV (Context Switch)
+	      │
+	Thread läuft auf PSP
+
     
 ## Scheduler
     void ViiROS_Scheduler(void)
@@ -72,19 +76,59 @@ Quelle: https://www.ti.com/tool/EK-TM4C123GXL
         SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
       } 
     }
+### Die Funktionsweise des Schedulers besteht aus zwei simplen Abfragen:
+- wenn readyMask 0= 0, so soll der Idle-Thread als nächstes laufen
+- wenn readyMask != 0, finde mit LOG2 = 32 - CLZ(readyMask) nächst höchste ready Prio 
+- setze das Pendingbit von PendSV um den Context Switch aus zulösen
 
-## Periodischer Ablauf:
+## Context Switch mit PendSV
 
-                    SysTick (1 ms)
-                         |
-                    BlockWatch (dekrementiert blocktime, set/clear readyMask/blockedMask)
-                         │
-                    Scheduler (LOG2(readyMask) → höchste Prio)
-                         │
-                    PendSV (Context Switch)
-                         │
-                    Thread läuft auf PSP
-
+	__stackless void PendSV_Handler(void)
+	{
+	  __asm volatile(
+	  
+	        /* __disable_irq();*/
+	       " CPSID     i                    \n"
+	         
+	        /* if (ViiROS_current != 0) */
+	       " LDR.N     R2, =ViiROS_current   \n"    // R2 = current 
+	       " LDR       R0, [R2]              \n"    // R0 = current-TCB
+	       " CBZ       R0, PendSV_first_run  \n"    // R0 == 0? -> restore
+	
+	       /* save R4 - R11 on stack */  
+	       " MRS       R1, PSP               \n"    // R1 = PSP
+	         
+	       /* Store Multiple, Decrement Before */
+	       " STMDB     R1!, {R4-R11}         \n"    // R1 = new PSP at R4
+	       " STR       R1, [R0]              \n"    // TCB->sp = R1
+	         
+	       /* sp = ViiROS_next->sp; */
+	       "PendSV_restore:                  \n"
+	       " LDR       R0, =ViiROS_next      \n"     // R0 = next
+	       " LDR       R1, [R0]              \n"     // R1 = next-TCB
+	       " LDR       R0, [R1]              \n"     // R0 = next-TCB->sp
+	       /* Load multiple, increment after */   
+	       " LDMIA     R0!, {R4-R11}         \n"     // Load R4 - R11, new sp at R0
+	       " MSR       PSP, R0               \n"     // PSP = R0 (SP)
+	        
+	         
+	        /* ViiROS_current = ViiROS_next; */
+	       " STR       R1, [R2]             \n"
+	         
+	        /* __enable_irq(); */
+	       " CPSIE     i                    \n"
+	       " BX        LR                   \n" 
+	
+	       /*#### FIRST pendSV RUN ######### */  
+	       "PendSV_first_run:               \n"
+	       
+	       " MOV       R3, #0x02            \n" 
+	       " MSR       CONTROL, R3          \n" 
+	       " ISB                            \n" 
+	       " LDR       LR, =0xFFFFFFFD      \n" /* << bug fix wihtout interrupt returns to main */
+	       " B         PendSV_restore       \n"  
+	  );
+	}
 
 ## Logic Analyzer View - Folgt noch um die präemptive Wirkungsweise zu beweisen!
 ### PulseView software from sigrok.org 
@@ -92,77 +136,237 @@ Quelle: https://www.ti.com/tool/EK-TM4C123GXL
 
 ## Architektur
 
-Das folgende Diagramm wurde aus meinem Code in `ViiROS.c` abgeleitet und mit Hilfe einer KI visualisiert.
-
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                              MAIN                                           │
-    │  SystemCoreClockUpdate → __disable_irq → SysTick_Init → GPIO_Init           │
-    │  → ViiROS_Init (startet Idle-Thread, setzt ViiROS_current = NULL)           │
-    │  → ViiROS_ThreadStart() → __enable_irq → ViiROS_Run()                       │
-    └─────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                         ViiROS_Run()                                        │
-    │   __disable_irq → ViiROS_lastInit() → ViiROS_Scheduler() → __enable_irq     │
-    │  (kehrt nie zurück)                                                         │
-    └─────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          │ (SysTick läuft parallel, 1 ms Takt)
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                      SYSTICK (1 ms Timer)                                   │
-    │  ┌─────────────────────────────────────────────────────────────────────┐    │
-    │  │ BlockWatch()                                                        │    │
-    │  │ - durchläuft blockierte Threads (blockedMask)                       │    │
-    │  │ - dekrementiert thread->blocktime                                   │    │
-    │  │ - wenn blocktime == 0: setzt readyMask, löscht blockedMask          │    │
-    │  └─────────────────────────────────────────────────────────────────────┘    │
-    │                                      │                                      │
-    │                                      ▼                                      │
-    │  ┌─────────────────────────────────────────────────────────────────────┐    │
-    │  │ Scheduler()                                                         │    │
-    │  │ - prüft readyMask                                                   │    │
-    │  │ - falls readyMask == 0 → Idle-Thread (Prio 0)                       │    │
-    │  │ - sonst: highPrio = LOG2(readyMask) → Active_Thread[highPrio]       │    │
-    │  │ - wenn current != next: ViiROS_next = next → trigger PendSV         │    │
-    │  └─────────────────────────────────────────────────────────────────────┘    │
-    └─────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          │ (trigger PendSV)
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                      PENDSV_HANDLER (Assembler)                             │
-    │  ┌─────────────────────────────────────────────────────────────────────┐    │
-    │  │ CPSID i          (Interrupts aus)                                   │    │
-    │  │ if(ViiROS_current != NULL) {                                        │    │
-    │  │     PUSH {r4-r11}                   (Callee-saved sichern)          │    │
-    │  │     ViiROS_current->sp = SP         (Stack speichern)               │    │
-    │  │ }                                                                   │    │
-    │  │ SP = ViiROS_next->sp                (Stack des neuen Threads laden) │    │
-    │  │ ViiROS_current = ViiROS_next        (aktuellen Thread aktualisieren)│    │
-    │  │ POP {r4-r11}                        (Callee-saved wiederherstellen) │    │
-    │  │ CPSIE i          (Interrupts an)                                    │    │
-    │  │ BX LR            (Rückkehr zum neuen Thread)                        │    │
-    │  └─────────────────────────────────────────────────────────────────────┘    │
-    └─────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                           THREADS (auf PSP)                                 │
-    │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
-    │  │ Red (Prio 9)    │  │ Blue (Prio 8)   │  │ Green (Prio 7)  │              │
-    │  │ Blinkt alle     │  │ Blinkt mit      │  │ Taster-Polling  │              │
-    │  │ 50/50 ms        │  │ Muster 50/50/   │  │ + Entprellung   │              │
-    │  │                 │  │ 250/120 ms      │  │ + Flankenerk.   │              │
-    │  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
-    │                                                                             │
-    │  ┌─────────────────────────────────────────────────────────────────────┐    │
-    │  │ Idle (Prio 0) – läuft nur wenn readyMask == 0                       │    │
-    │  │ __WFI() – CPU schläft, wartet auf nächsten Interrupt                │    │
-    │  └─────────────────────────────────────────────────────────────────────┘    │
-    └─────────────────────────────────────────────────────────────────────────────┘
-
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                              ViiROS KERNEL                                  │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐          │
+	│  │   main()        │    │   SysTick_IRQ   │    │   PendSV_IRQ    │          │
+	│  │                 │    │   (1ms)         │    │   (Context Sw)  │          │
+	│  │ ViiROS_Init()   │    │                 │    │                 │          │
+	│  │ ViiROS_Run()    │    │ ViiROS_Block    │    │ ┌─────────────┐ │          │
+	│  │ ViiROS_lastInit │    │    Watch()      │    │ │save R4-R11  │ │          │
+	│  └────────┬────────┘    │ ViiROS_Sched    │    │ │restore R4-11│ │          │
+	│           │             │    uler()       │    │ │set PSP      │ │          │
+	│           │             └────────┬────────┘    │ │switch SP    │ │          │
+	│           │                      │             │ └─────────────┘ │          │
+	│           ▼                      ▼             └────────┬────────┘          │
+	│  ┌────────────────────────────────────────────────────────────────┐         │
+	│  │                     THREAD MANAGEMENT                          │         │
+	│  ├────────────────────────────────────────────────────────────────┤         │
+	│  │                                                                │         │
+	│  │  ┌─────────────────────────────────────────────────────┐       │         │
+	│  │  │              Ready Queue (Priority based)           │       │         │
+	│  │  │                                                     │       │         │
+	│  │  │  readyMask = 0b...100...010...0                     │       │         │
+	│  │  │                                                     │       │         │
+	│  │  │  Prio 31 │ Prio 30 │ ... │ Prio 2 │ Prio 1 │ Idle   │       │         │
+	│  │  │  ┌─────┐ │ ┌─────┐ │     │ ┌─────┐ │ ┌─────┐ │┌───┐ │       │         │
+	│  │  │  │Threa│ │ │Threa│ │ ... │ │Threa│ │ │Threa│ ││Idl│ │       │         │
+	│  │  │  └─────┘ │ └─────┘ │     │ └─────┘ │ └─────┘ │└───┘ │       │         │
+	│  │  └─────────────────────────────────────────────────────┘       │         │
+	│  │                                                                │         │
+	│  │  ┌─────────────────────────────────────────────────────┐       │         │
+	│  │  │            Blocked Queue (Time based)               │       │         │
+	│  │  │                                                     │       │         │
+	│  │  │  blockedMask = 0b...010...0                         │       │         │
+	│  │  │                                                     │       │         │
+	│  │  │  Thread A (blocktime=5ms)                           │       │         │
+	│  │  │  Thread B (blocktime=3ms)                           │       │         │
+	│  │  │  ...                                                │       │         │
+	│  │  └─────────────────────────────────────────────────────┘       │         │
+	│  └────────────────────────────────────────────────────────────────┘         │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                           THREAD CONTROL BLOCK (TCB)                        │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│  ┌──────────────────────────────────────────────────────────────────┐       │
+	│  │  ViiROS_Thread                                                   │       │
+	│  │  ┌───────────────┐                                               │       │
+	│  │  │ sp (uint32_t*)│ ────► Stack Pointer (zeigt auf R4 im Stack)   │       │
+	│  │  ├───────────────┤                                               │       │
+	│  │  │ priority      │                                               │       │
+	│  │  │ (uint8_t)     │                                               │       │
+	│  │  ├───────────────┤                                               │       │
+	│  │  │ blocktime     │                                               │       │
+	│  │  │ (uint32_t)    │                                               │       │
+	│  │  └───────────────┘                                               │       │
+	│  └──────────────────────────────────────────────────────────────────┘       │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                           THREAD STACK LAYOUT                               │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│  ┌─────────────────────────────────────────────────────────────────┐        │
+	│  │  HIGH ADDRESS                                                   │        │
+	│  │  ┌─────────────────┐                                            │        │
+	│  │  │      ...        │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │    xPSR         │  (0x21000000 - Thumb-Bit)                  │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      PC         │  (Thread Entry Point)                      │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      LR         │  (0xFFFFFFFD - EXC_RETURN)                 │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R12        │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R3         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R2         │  Hardware Stack Frame                      │        │
+	│  │  ├─────────────────┤  (Auto-saved by CPU on interrupt)          │        │
+	│  │  │      R1         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R0         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R11        │ ◄──                                        │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R10        │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R9         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R8         │  Software Stack Frame                      │        │
+	│  │  ├─────────────────┤  (Manually saved by PendSV)                │        │
+	│  │  │      R7         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R6         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R5         │                                            │        │
+	│  │  ├─────────────────┤                                            │        │
+	│  │  │      R4         │ ◄── PSP zeigt hierher                      │        │
+	│  │  └─────────────────┘                                            │        │
+	│  │  LOW ADDRESS                                                    │        │
+	│  └─────────────────────────────────────────────────────────────────┘        │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                         CONTROL FLOW DIAGRAM                                │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│   main()                                                                    │
+	│     │                                                                       │
+	│     ▼                                                                       │
+	│   ViiROS_Init() 							      							  │
+	│     │                                                                       │
+	│     │  - Set PendSV priority (lowest)                                       │
+	│     │  - Create Idle Thread                                                 │
+	│     │  - ViiROS_current = NULL                                              │
+	│     │                                                                       │
+	│     ▼                                                                       │
+	│   ViiROS_Run()                                                              │
+	│     │                                                                       │
+	│     │  - ViiROS_lastInit()                                                  │
+	│     │  - ViiROS_Scheduler()                                                 │
+	│     │         │                                                             │
+	│     │         ├─► Find highest priority thread via LOG2(readyMask)          │
+	│     │         │                                                             │
+	│     │         └─► SCB->ICSR |= PENDSVSET ─────────────────────────┐         │
+	│     │                                                             │         │
+	│     │                                                             ▼         │
+	│     │                                                   ┌──────────────────┐│
+	│     │                                                   │   PendSV_Handler ││
+	│     │                                                   │                  ││
+	│     │                                                   │ current == NULL? ││
+	│     │                                                   │   │              ││
+	│     │                                                   │   ├─YES─────────┐││
+	│     │                                                   │   │             │││
+	│     │                                                   │   │ Set CONTROL │││
+	│     │                                                   │   │ Set LR=FD   │││
+	│     │                                                   │   │             │││
+	│     │                                                   │   └─NO──────────┘││
+	│     │                                                   │   │              ││
+	│     │                                                   │ Save R4 - R11    ││
+	│     │                                                   │   │              ││
+	│     │                                                   │   ▼              ││
+	│     │                                                   │ Restore R4-R11   ││
+	│     │                                                   │ Set PSP          ││
+	│     │                                                   │ BX LR            ││
+	│     │                                                   └──────────────────┘│
+	│     │                                                            │          │
+	│     ▼                                                            ▼          │
+	│   ┌─────────────────────────────────────────────────────────────────┐       │
+	│   │                    THREAD EXECUTION                             │       │
+	│   │                                                                 │       │
+	│   │  ┌─────────────────────────────────────────────────────────┐    │       │
+	│   │  │  Thread runs...                                         │    │       │
+	│   │  │     │                                                   │    │       │
+	│   │  │     ├─► ViiROS_BlockTime() ──► set blocktime            │    │       │
+	│   │  │     │       │                  clear readyMask          │    │       │
+	│   │  │     │       │                  set blockedMask          │    │	      │
+	│   │  │     │       └─► ViiROS_Scheduler() ──► trigger PendSV   │    │       │
+	│   │  │     │                                                   │    │       │
+	│   │  │     └─► SysTick_Handler (every 1ms)                     │    │       │
+	│   │  │              │                                          │    │       │
+	│   │  │              ├─► ViiROS_BlockWatch()                    │    │       │
+	│   │  │              │      │                                   │    │       │
+	│   │  │              │      └─► decrement blocktime             │    │       │
+	│   │  │              │           if blocktime == 0:             │    │       │
+	│   │  │              │             readyMask |= bit             │    │       │
+	│   │  │              │             blockedMask &= ~bit          │    │       │
+	│   │  │              │                                          │    │       │
+	│   │  │              └─► ViiROS_Scheduler() ──► trigger PendSV  │    │       │
+	│   │  │                                                         │    │       │
+	│   │  └─────────────────────────────────────────────────────────┘    │       │
+	│   │                                                                 │       │
+	│   │  Idle Thread (Prio 0)                                           │       │
+	│   │     │                                                           │       │
+	│   │     └─► __WFI() (Wait for Interrupt)                            │       │
+	│   │                                                                 │       │
+	│   └─────────────────────────────────────────────────────────────────┘       │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                         INTERRUPT PRIORITIES                                │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│   Higher Priority                                                           │
+	│        │                                                                    │
+	│        ▼                                                                    │
+	│   ┌─────────────────────────────────────────────────────────────────┐       │
+	│   │  Other Interrupts (SysTick, GPIO, UART, etc.)                   │       │
+	│   │  (Priorities 0x00 - 0xFE)                                       │       │
+	│   └─────────────────────────────────────────────────────────────────┘       │
+	│        │                                                                    │
+	│        ▼                                                                    │
+	│   ┌─────────────────────────────────────────────────────────────────┐       │
+	│   │  PendSV (Priority 0xFF - lowest)                                │       │
+	│   │  - Context switch only when no other interrupts pending         │       │
+	│   └─────────────────────────────────────────────────────────────────┘       │
+	│        │                                                                    │
+	│        ▼                                                                    │
+	│   Lower Priority                                                            │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
+	
+	┌─────────────────────────────────────────────────────────────────────────────┐
+	│                         PRIORITY MAPPING                                    │
+	├─────────────────────────────────────────────────────────────────────────────┤
+	│                                                                             │
+	│   Priority    │ Bit in Mask   │ Description                                 │
+	│   ────────────┼───────────────┼─────────────────────────────────────────────│
+	│   0           │ (not in mask) │ Idle Thread (always ready if mask == 0)     │
+	│   1           │ bit 0         │ Lowest user thread priority                 │
+	│   2           │ bit 1         │                                             │
+	│   ...         │ ...           │                                             │
+	│   31          │ bit 30        │                                             │
+	│   32          │ bit 31        │ Highest user thread priority                │
+	│                                                                             │
+	│   readyMask = (1 << (priority - 1))                                         │
+	│                                                                             │
+	│   Example: Priority 8 → bit 7 → readyMask |= (1 << 7)                       │
+	│            Priority 18 → bit 17 → readyMask |= (1 << 17)                    │
+	│                                                                             │
+	│   Highest Priority Finding:                                                 │
+	│   highPrio = LOG2(readyMask) = 32 - __CLZ(readyMask)                        │
+	│                                                                             │
+	└─────────────────────────────────────────────────────────────────────────────┘
 
 # Allgemeine Hinweise zum Starten des Systems
 ViiROS kann mit bis zu 32 Threads verschiedener Prioritäten arbeiten. 
@@ -217,7 +421,7 @@ Normal bei RTOS: Threads laufen auf PSP, nicht auf CSTACK.
 Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems Programming Course** von **Miro Samec (Quantum Leaps)** auf, den ich intensiv studiert habe.  
 Die dort vermittelten Prinzipien – insbesondere zu präemptivem Scheduling, PendSV, Stack-Management und RTOS-Interna – habe ich verstanden und in eine **eigene, eigenständige Implementierung** überführt.
 
-Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Hardware (TM4C123) sowie meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
+Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
 
 Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf.
 Ziel des Projekts war es, die Funktionsweise und Besonderheiten eines preemptiven System zu erlernen und umzusetzen.
