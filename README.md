@@ -34,25 +34,30 @@
 ## Quick Start
 ViiROS kann mit bis zu 32 Threads verschiedener Prioritäten arbeiten. 
 
-Für die Threads muss der Thread (TCB), Stack mit Stackgröße, Thread-Handler in main.c deklariert und programmiert werden.
+Für die Threads muss:
+- Thread (TCB)
+- Stack mit Stackgröße
+- Thread-Handler 
+in main.c deklariert und programmiert werden.
+
 Dieses wurde für den Idle-Thread bereits in ViiROS.c hinterlegt. Der Idle-Thread wird mit ViiROS_Init() gestartet.
 Das Starten der Threads erfolgt mit:
 
-    ViiROS_Thread Red;
-    static uint32_t stack_Red[80];
-
+    ViiROS_Thread Red; /* Thread_TCB erstellen */
+    static uint32_t stack_Red[80]; /* Stack mit Stackgröße initialisieren */
+	/* Thread_Handler programmieren*/
     void Red_Handler(void)
     {
       while(1){
        /* Code */
     }
-  
+  	/* Thread starten */ 
     ViiROS_ThreadStart(&Red,
                          Red_Handler,
                          Priority,
                          stack_Red, sizeof(stack_Red));
 
-Um den Wechsel von MSP auf PSP sicherzustellen muss der Current-Thread für den allerersten Context Switch mit NULL initialisiert werden:
+Um den **Wechsel von MSP auf PSP** sicherzustellen muss der Current-Thread für den allerersten Context Switch mit NULL initialisiert werden:
 
     ViiROS_current = NULL;
 
@@ -61,6 +66,16 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
     ViiROS_Run()
   
 **Wichtig:** ViiROS_Run() kehrt nie zurück – das System läuft von nun an im Thread-Modus auf PSP.
+
+
+## Projektstruktur
+	Datei				Beschreibung
+	ViiROS.c/h		Kernel, Scheduler, Blocking
+	SysTick.c/h		Zeitbasis (1ms)
+	GPIO.c/h		LED, Taster 
+	main.c			Beispiel-Threads
+
+
 ## Hardware & Toolchain
 - IAR Embedded Workbench (Arm)
 - Tiva C Series LaunchPad TM4C123GXL
@@ -72,13 +87,13 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 
 ### Periodischer Ablauf
 
-	SysTick (1 ms)
+	SysTick (1 ms) [höchste Interrupt-Prio]
 	      |
 	BlockWatch (dekrementiert blocktime, set/clear readyMask/blockedMask)
 	      │
 	Scheduler (LOG2(readyMask) → höchste Prio)
 	      │
-	PendSV (Context Switch)
+	PendSV (Context Switch) [niedrigste Interrupt-Prio]
 	      │
 	Thread läuft auf PSP
 	
@@ -104,60 +119,63 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 	        SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
 	      } 
 	    }
-### Die Funktionsweise des Schedulers besteht aus zwei simplen Abfragen:
+#### Die Funktionsweise des Schedulers besteht aus zwei simplen Abfragen:
 - wenn readyMask 0= 0, so soll der Idle-Thread als nächstes laufen
-- wenn readyMask != 0, finde mit LOG2 = 32 - CLZ(readyMask) nächst höchste ready Prio 
-- setze das Pendingbit von PendSV um den Context Switch aus zulösen
+- wenn readyMask != 0, finde mit LOG2 = 32 - CLZ(readyMask)- nächst höchste ready Prio 
+- setze das Pendingbit von PendSV um den Context Switch auszulösen
+
+
 ### Context Switch (PendSV)
 Beim ersten PendSV in System:
 - Current-Thread = NULL -> springt zu PendSV_first_run:
   	- Setze Special Register CONTROL = 0x02 (SPSEL = 1 => Bit 1) ==> sagt der CPU "Benutze PSP" (Process Stack Pointer)
   	- Setze LR = 0xFFFFFFFD (EXC_RETURN) ==> Spring aus dem Interrupt und nutze PSP
   	- ISB ==> notwendig um Änderungen zu übernehmen
-  	- Spring zu  PendSV_restore
-  		- Lade ViiROS_next => Thread_TCB => Thread->sp in R0
-  	 	- LDMIA     R0!, {R4-R11} (load multible and increment after) => Lade R4 vom Stack in R4 und inkrementiere R0
-  	  	- nach dem R11 geladen wurde zeigt der R0 im Register auf R0 in unserem Thread-Sack
-  	  	- MSR       PSP, R0  (move general purpose register into special register)	Setzte nun PSP auf den Wert von r0
-  	  	- PSP ist nun auf R0 im Stack ausgerichtet und bereit für den Sprung aus dem Interrupt
-  	  	- Nach BX LR werden die Hardware Register (Caller Save) automatisch geladen 
 
 **Wichtig:** **CONTROL = 0x02** und **LR = 0xFFFFFFFD** in Verbindung sind wichtig. Da der erste PendSV-Interrupt-Aufruf aus main() erfolgt steht zu nächst der falsche Wert im LR-Register!!! Wird der Wert in LR nicht auf 0xFFFFFFFD gesetzt so kehrt der PendSV-Interrupt wieder zurück zu main.c und beendet das Programm. 
 
 ### Normaler PendSV-Durchlauf
-Nach dem aller ersten Durchlauf von PendSV wird der Brench PendSV_first_run nie wieder aufgerufen! Jetzt wird immer der normale Durchlauf für den Context Switch durch gelaufen.
+Nach erstem PendSV wird der Brench **PendSV_first_run nie wieder aufgerufen!** Jetzt wird immer der **normale Context Switch** durchlaufen.
 - Speichere den Kontext des aktuellen Threads
-	- MRS       R1, PSP (move special register intro general purpose register) => lade PSP und R1
- 	- STMDB     R1!, {R4-R11} (store multible and decrement before) => dekrementiere R1 und speichere R11 auf PSP-Stack -> --R1 save R10
-  	- Reihenfolge ist hier umgedreht R11 -> R4  (beim Laden R4 - R11)
+	- MRS       R1, PSP (move special register into general purpose register) => lade PSP und R1
+ 	- STMDB     R1!, {R4-R11} (store multible, decrement before) => dekrementiere R1 und speichere R11 auf PSP-Stack -> --R1 save R10
+  	- Reihenfolge ist hier R11 -> R4  (beim Laden R4 - R11)
 	- STR       R1, [R0]  => Speichere R1 (PSP) in [R0] (Thread->SP) **R0 = Thread_TCB => [Thread_TCN] = Thread->SP (erstes Atrribut im TCB)
-	- Somit sind R4 - R11 auf dem Stack von Current-Thread und der PSP im Current-Thread->SP gespeichert!!
+	- Speichere PSP im Thread->SP
+
 - Lade den nächsten Thread
-	- Lad in R0 den Thread->SP
- 	- LDMIA     R0!, {R4-R11} => Lade R4 vom Stack in R4 und inkrementiere R0
-  	- Reihenfolge beim Laden ist R4 - R11
-  	- R0 zeigt nach dem Laden auf R0 auf dem PSP-Stack und ist bereit zum Laden der Hardware Register
-  	- MSR       PSP, R0 => Setze PSP auf neune R0
+	- Lad in R0 den Thread->SP (Darin ist PSP vom näcshten Thread gespeichert)
+ 	- LDMIA     R0!, {R4-R11} => Lade R4 vom Stack in R4 und inkrementiere R0 (Reihenfolge beim Laden ist R4 - R11)
+  	- R0 zeigt nach dem Laden auf **R0 auf dem PSP-Stack** und ist bereit zum Laden der Hardware Register
+  	- MSR       PSP, R0 => Setze PSP auf neuen R0
   	- STR       R1, [R2] => setze ViiROS_current auf ViiROS_next
+
 ### Thread-Zustände & Blocking
 
-## Projektstruktur
-	Datei				Beschreibung
-	ViiROS.c/h		Kernel, Scheduler, Blocking
-	SysTick.c/h		Zeitbasis (1ms)
-	GPIO.c/h		LED, Taster
-	main.c			Beispiel-Threads
-		
+Die Threads haben zwei Zustände **Ready** und **Blocked**. Beide werden in jeweils einer 32-Bit Bitmaske repräsentiert. 
+Der **Index** der Bits steht für die **Priorität** der Threads:
+
+*                  Bit:         31 30 29 ... 5 4 3 2 1 0 <-- (priority - 1)
+*                  Value:        0  0  0 ... 0 1 0 1 0 1 
+
+- "Ready" - Threads -> readyMask
+- "Blocked" - Threads -> blockedMask
+
+Zum Scannen der Masken wird die CLZ() [Count leading zeros] auf ARM verwendet und eröglich das Auslesen in einem Durchlauf.
+
+
 ## Herausforderungen & Lösungen
 ### Stack-Korruption durch falsche Initialisierung von Current-Thread (ViiROS_current):
   - Problem: ViiROS_current = Idle-Thread vor erstem Context Switch
   - Folge:   PSP (Process Stack Pointer) im Idle-TCB wurde mit MSP (Main Stack Pointer) im PendSV_Handler überschrieben.
            Sobald der Idle-Thread an der Reihe war führte der MSP wieder zurück in main() und beendete das System.
   - Lösung:  ViiROS_current = NULL, somit wurde der Wechsel von MSP zu PSP sichergestellt
+
 ### Stack Overflow durch zu kleine Thread-Stacks:
   - Problem:  Stackgröße für die einzelnen Threads zu klein gewählt. Der Stack wuchs in den Bereich des Arrays der aktiven Threads (Active_Thread[]).
   - Folge:    Array-Einträge wurden überschrieben und gestartete Threads zerstört.
-  - Lösung:   Zu kleine Größe wurde mit hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße schrittweise erhöht.
+  - Lösung:   Zu kleine Größe wurde mit Hilfe von Magic Numbers (0xCAFEBABE) erkannt und der Stackgröße schrittweise erhöht.
+
 ### Hard Faults durch nicht initialisierte GPIO-Pins
   - Problem:  Ein Thread hat auf nicht initialisierte GPIO Pins zugegriffen.
   - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
@@ -165,11 +183,8 @@ Nach dem aller ersten Durchlauf von PendSV wird der Brench PendSV_first_run nie 
 
 ## Proof of Concept
 
-## Weiterführende Dokumentation
-
 ## Lernhintergrund
-Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems Programming Course** von **Miro Samec (Quantum Leaps)** auf, den ich intensiv studiert habe.  
-Die dort vermittelten Prinzipien – insbesondere zu präemptivem Scheduling, PendSV, Stack-Management und RTOS-Interna – habe ich verstanden und in eine **eigene, eigenständige Implementierung** überführt.
+Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems Programming Course** von **Miro Samec (Quantum Leaps)** auf, den ich intensiv studiert habe.  Die dort vermittelten Prinzipien – insbesondere zu präemptivem Scheduling, PendSV, Stack-Management und RTOS-Interna – habe ich verstanden und in eine **eigene, eigenständige Implementierung** überführt.
 
 Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
 
