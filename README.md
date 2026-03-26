@@ -126,7 +126,7 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 
 
 ### Context Switch (PendSV)
-Beim ersten PendSV in System:
+#### Beim ersten PendSV in System:
 - Current-Thread = NULL -> springt zu PendSV_first_run:
   	- Setze Special Register CONTROL = 0x02 (SPSEL = 1 => Bit 1) ==> sagt der CPU "Benutze PSP" (Process Stack Pointer)
   	- Setze LR = 0xFFFFFFFD (EXC_RETURN) ==> Spring aus dem Interrupt und nutze PSP
@@ -134,7 +134,7 @@ Beim ersten PendSV in System:
 
 **Wichtig:** **CONTROL = 0x02** und **LR = 0xFFFFFFFD** in Verbindung sind wichtig. Da der erste PendSV-Interrupt-Aufruf aus main() erfolgt steht zu nächst der falsche Wert im LR-Register!!! Wird der Wert in LR nicht auf 0xFFFFFFFD gesetzt so kehrt der PendSV-Interrupt wieder zurück zu main.c und beendet das Programm. 
 
-### Normaler PendSV-Durchlauf
+#### Normaler PendSV-Durchlauf
 Nach erstem PendSV wird der Brench **PendSV_first_run nie wieder aufgerufen!** Jetzt wird immer der **normale Context Switch** durchlaufen.
 - Speichere den Kontext des aktuellen Threads
 	- MRS       R1, PSP (move special register into general purpose register) => lade PSP und R1
