@@ -191,6 +191,13 @@ Zum Scannen der Masken wird die CLZ() [Count leading zeros] auf ARM verwendet un
   - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
   - Lösung:   In main() die GPIO Konfiguration ergänzen.
 
+
+### Inkorekter EXC_RETURN in LR im PendSv
+  - Problem:  Falscher EXC_RETURN in LR während des PendSV durch den Wechsel von main() -> PendSV
+  - Folge:    CPU kehrte nach PendSV zurück zu main() und beendete das Programm.
+  - Lösung:   Zusätzlich zu CONTROL den korrekten EXC_RETURN in LR schreiben - LR = 0XFFFFFFFD => "return" in Thread-Mode und nutze PSP!!!
+
+
 ## Architekturdiagramm
 
 	┌────────────────────────────────────────────┐
