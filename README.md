@@ -15,7 +15,7 @@ Dieses Projekt umfasst ein eigenständig erarbeitetes Mini RTOS mit:
 	- Parallele Ausführung (Multitasking-System)
 
 - Kernel / Scheduler:
-	- Präemtiver Scheduler
+	- Präemptiver Scheduler
 	- Prioritätenbasiert 
 	- Bitmasken (32 Bit -> 32 Prioritäten) mit (32 - CLZ) (count leading zeros) -> O(1):
 		- readyMask     0b01000000000000000000000100000000 (Prio 31, 9 ready)
@@ -27,7 +27,7 @@ Dieses Projekt umfasst ein eigenständig erarbeitetes Mini RTOS mit:
 	- BlockWatch() -> Blocktime Management, Unblock Threads
 
 - Kontextwechsel (Context Switch):
-	- PendSV als Context Swtich Interrupt in assembly
+	- PendSV als Context Switch Interrupt in assembly
 	- Manuelles Sichern/Laden der Calle Save Register (R4-R11) auf/vom PSP
 	- Manuelles PSP setzen
 
@@ -192,7 +192,7 @@ Zum Scannen der Masken wird die CLZ() [Count leading zeros] auf ARM verwendet un
   - Lösung:   In main() die GPIO Konfiguration ergänzen.
 
 
-### Inkorekter EXC_RETURN in LR im PendSv
+### Inkorrekter EXC_RETURN in LR im PendSv
   - Problem:  Falscher EXC_RETURN in LR während des PendSV durch den Wechsel von main() -> PendSV
   - Folge:    CPU kehrte nach PendSV zurück zu main() und beendete das Programm.
   - Lösung:   Zusätzlich zu CONTROL den korrekten EXC_RETURN in LR schreiben - LR = 0XFFFFFFFD => "return" in Thread-Mode und nutze PSP!!!
@@ -218,7 +218,7 @@ Zum Scannen der Masken wird die CLZ() [Count leading zeros] auf ARM verwendet un
 	│                    │                       │
 	│                    ▼                       │
 	│   ┌─────────────────────────────────┐      │
-	│   │      HARDWARE (TM4C123GL)       │      │
+	│   │      HARDWARE (TM4C123GH6PM)    │      │
 	│   │   LED   │   Switch   │ SysTick  │      │
 	│   └─────────────────────────────────┘      │
 	└────────────────────────────────────────────┘
