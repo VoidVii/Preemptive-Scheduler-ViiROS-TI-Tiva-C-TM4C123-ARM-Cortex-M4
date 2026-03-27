@@ -1,17 +1,24 @@
 # ViiROS – Präemptives MINI RTOS für ARM Cortex-M4 (TM4C123GL - TM4C123GH6PM)
+
 Dieses Projekt umfasst ein eigenständig erarbeitetes Mini RTOS mit:
-- präemptives Scheduling
+- präemptives O(1)-Scheduling
 - prioritätenbasierte Ausführung der Threads
 - klassischem Context Switch über PendSV
 - MSP für Interrupts (Handler Mode)
 - PSP für Threads (Thread Mode)
 - SysTick als 1ms Zeitbasis
 
+<img width="300" height="260" alt="grafik" src="https://github.com/user-attachments/assets/dfaf1cd7-16ac-479e-95ba-650f5d7e973a" /> 
+Quelle: https://www.ti.com/tool/de-de/EK-TM4C123GXL
+
 ## Features
 - Thread-System
 	- Thread Control Blocks (TCB)
 	- Stack pro Thread
-	- fabrizierter Initial-Stack (aufgebaut als wäre Thread vom Interrupt unterbrochen)
+	- fabrizierter Initial-Stack auf PSP (als wäre Thread vom Interrupt unterbrochen)
+   		- XPSR, PC, LR, R12, R3-R0 (Caller Saved Register)
+     	- R11 - R4 (Calle Saved Register)
+    - Magic Numbers zur Stack und Overflow Erkennung  
 	- Parallele Ausführung (Multitasking-System)
 
 - Kernel / Scheduler:
@@ -23,20 +30,28 @@ Dieses Projekt umfasst ein eigenständig erarbeitetes Mini RTOS mit:
 
 - Timing & Blocking
 	- SysTick 1ms Zeitbasis
-	- ViiROS_BlockTime() -> Block Threads
-	- BlockWatch() -> Blocktime Management, Unblock Threads
-
-- Kontextwechsel (Context Switch):
-	- PendSV als Context Switch Interrupt in assembly
-	- Manuelles Sichern/Laden der Calle Save Register (R4-R11) auf/vom PSP
-	- Manuelles PSP setzen
+ 		- ViiROS_BlockWatch(): Block Threads -> blockedMask
+   		- ViiROS_Scheduler(): Blocktime Management, Unblock Threads -> ebenfalls über CLZ
 
 - CPU-Modus-Handling:
 	- Handler Mode u. Thread Mode
 	- MSP (Main Stack Pointer) für Interrupts
 	- PSP (Process Stack pointer) für Threads
 	- Spacial Register CONTROL (= 0x02 -> SPSEL; Umschalten von MSP -> PSP)
-	- EXC_RETURN 0xFFFFFFFD (Scheduler returns from Interrupt into thread)
+	- EXC_RETURN LR = 0xFFFFFFFD (Scheduler returns from interrupt into thread)
+ 	- Idle mit WFI() (Wait For Interrupt) - Sleep bis zum nächsten Interrupt
+
+- Kontextwechsel (Context Switch):
+	- PendSV als Context Switch Interrupt in assembly
+	- Manuelles Sichern/Laden der Calle Save Register (R4-R11) auf/vom PSP
+ 		- STMDB R1!, {R4-R11} -> R4-R11 sichern
+   		- LDMIA R1, {R4-R11} -> R4-R11 laden
+	- Manuelles PSP setzen
+ 		- MRS       R1, PSP  -> R1 = PSP (sichern)
+   		- MSR       PSP, R0  -> PSP = R0 (laden)
+ 		- nutzen mit (CONTROL // EXC_RETURN)
+
+
 
 ## Quick Start
 ViiROS kann mit bis zu 32 Threads verschiedener Prioritäten arbeiten. 
@@ -48,11 +63,14 @@ Für die Threads muss:
  
 in main.c deklariert und programmiert werden.
 
+**Beispiele sind in main.c zu sehen!**
+
 Dieses wurde für den **Idle-Thread** bereits in ViiROS.c hinterlegt. Der Idle-Thread wird mit ViiROS_Init() gestartet.
 Das Starten der Threads erfolgt mit:
 
-    ViiROS_Thread Red; /* Thread_TCB erstellen */
-    static uint32_t stack_Red[80]; /* Stack mit Stackgröße initialisieren */
+    ViiROS_Thread Red; 					 /* Thread_TCB erstellen */
+    static uint32_t stack_Red[80];		 /* Stack mit Stackgröße initialisieren */
+	
 	/* Thread_Handler programmieren*/
     void Red_Handler(void)
     {
@@ -77,11 +95,11 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 
 
 ## Projektstruktur
-	Datei:			Beschreibung:
+	Datei:			  Beschreibung:
 	ViiROS.c/h		Kernel, Scheduler, Blocking
 	SysTick.c/h		Zeitbasis (1ms)
-	GPIO.c/h		LED, Taster 
-	main.c			Beispiel-Threads
+	GPIO.c/h		  LED, Taster 
+	main.c			  Beispiel-Threads
 
 
 ## Hardware & Toolchain
@@ -115,7 +133,7 @@ Zuvor wird durch den Aufruf des Schedulers der **nächste Thread to run** ausgew
 	      
 	      if(ViiROS_readyMask == 0U) /**< no thread ready = idle */
 	      {
-	        next = Active_Thread[0];
+	        next = Active_Thread[0]; /**< Idle-Thread */
 	      }
 	      else 
 	      {
@@ -129,6 +147,8 @@ Zuvor wird durch den Aufruf des Schedulers der **nächste Thread to run** ausgew
 	        SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
 	      } 
 	    }
+
+
 #### Die Funktionsweise des Schedulers besteht aus zwei simplen Abfragen:
 - wenn readyMask 0= 0, so soll der Idle-Thread als nächstes laufen
 - wenn readyMask != 0, finde mit LOG2 = 32 - CLZ(readyMask)- nächst höchste ready Prio 
@@ -191,7 +211,6 @@ Zum Scannen der Masken wird die CLZ() [Count leading zeros] auf ARM verwendet un
   - Folge:    Hard Fault, sobald der Thread auf die LED zugriff.
   - Lösung:   In main() die GPIO Konfiguration ergänzen.
 
-
 ### Inkorrekter EXC_RETURN in LR im PendSv
   - Problem:  Falscher EXC_RETURN in LR während des PendSV durch den Wechsel von main() -> PendSV
   - Folge:    CPU kehrte nach PendSV zurück zu main() und beendete das Programm.
@@ -229,4 +248,4 @@ Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems
 
 Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
 
-Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf.
+Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf und repräsentiert meine erstes größere Projekt in Thema Embedded Systems.
