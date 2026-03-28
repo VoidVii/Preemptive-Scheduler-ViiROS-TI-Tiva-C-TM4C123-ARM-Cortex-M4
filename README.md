@@ -276,3 +276,21 @@ Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems
 Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
 
 Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf und repräsentiert meine erstes größere Projekt in Thema Embedded Systems.
+
+## Debugging - Screenshots - Bugs
+
+### Zu kleine Stackgröße --> Stack Overflow -> BusFault, Active-Thread[] korumpiert
+
+<img width="650" height="350" alt="ZuKleineStackProbleme" src="https://github.com/user-attachments/assets/0b4f6e69-1684-4dea-a1d9-7c51c62d8116" />
+
+### ViiROS_current =! NULL beim System-Start
+1. Falscher Current-Thread zum System-Start
+2. ViiROS_IDLE (Current-Thread) initialisierter Stack mit ViiROS_Idle->SP 0x2000´0248 reigt auf R4 = 0xCAFEBABE
+3. ViiROS_Idle->SP wurde im PendSV beim speichern des PSP in Idle->Sp mit flaschen Wert überschrieben => Idle-Thread zerstört
+5. CBZ (Abfrage cuurent == 0?) keinen Sprung zum PendSV_first_run
+	- CONTROL(0x02) und LR(0xFFFF FFFD) wurden nicht gesetzt!
+	- Kein Wechsel von MSP auf PSP
+ 	- Nach Interrupt geht zurück in ViiROS_Run() in main.c
+
+<img width="850" height="578" alt="CurrentFalschGesetzt" src="https://github.com/user-attachments/assets/fbf25b5e-af18-447d-ad58-934eb94dcfe3" />
+
