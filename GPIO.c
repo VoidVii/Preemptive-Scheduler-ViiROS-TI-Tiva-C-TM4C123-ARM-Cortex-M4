@@ -80,9 +80,11 @@ void GPIO_EnablePort(uint8_t port)
  */
 void GPIO_ConfigureOutput(uint8_t port, uint32_t pin)
 {
+    volatile uint32_t* lock;  /* Pointer to GPIOLOCK register */
+    volatile uint32_t* cr;    /* Pointer to GPIOCR (Commit) register */
     volatile uint32_t* dir;  /* Pointer to GPIODIR register */
     volatile uint32_t* den;  /* Pointer to GPIODEN register */
-
+    
     /*
      * Calculate register addresses
      * 
@@ -96,11 +98,30 @@ void GPIO_ConfigureOutput(uint8_t port, uint32_t pin)
      * Each GPIO port occupies 0x1000 bytes (4 KB) of address space.
      * Register offsets are added to the base address.
      */
+    
+    /*
+     * Calculate register addresses
+     * Protected pins (like PF0) require unlocking before configuration
+     */
+    lock = (volatile uint32_t*)
+        ((GPIO_AHB_BASE + (port * 0x1000U)) + GPIO_LOCK_OFFSET);
+
+    cr = (volatile uint32_t*)
+        ((GPIO_AHB_BASE + (port * 0x1000U)) + GPIO_CR_OFFSET);
+    
     dir = (volatile uint32_t*)
         ((GPIO_AHB_BASE + (port * 0x1000U)) + GPIO_DIR_OFFSET);
 
     den = (volatile uint32_t*)
         ((GPIO_AHB_BASE + (port * 0x1000U)) + GPIO_DEN_OFFSET);
+    
+     /*
+     * Unlock the pin if it's protected
+     * The GPIOLOCK register enables write access to GPIOCR.
+     * Writing the magic key 0x4C4F434B ("LOCK") unlocks it.
+     */
+    *lock = 0x4C4F434BU;
+    *cr |= (1U << pin);        /* Allow configuration changes */
 
     /* Configure pin as output (1 = output) */
     *dir |= (1U << pin);

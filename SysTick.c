@@ -15,6 +15,7 @@
 #include "SysTick.h"
 #include "system_TM4C123.h"
 #include "ViiROS.h"
+#include "GPIO.h"
 
 uint32_t SysTick_Reload_Value(void)
 {
@@ -100,14 +101,26 @@ static volatile uint32_t TickCounter;
  */
 void SysTick_Handler(void)
 {
-    TickCounter++; /* As long as only SysTick has access its safe */
+    /* Only for visualization in Pulsview (Logic Analyzer) */
+    GPIO_WritePin(GPIO_PORTF, Switch_1, 1);
     
+    for(int i = 0; i < 200; i++)
+    {    
+    }
+    GPIO_WritePin(GPIO_PORTF, Switch_1, 0);
+    /* **************************************************** */
+    
+    
+    TickCounter++; /* As long as only SysTick has access its safe */
+    /* Start Critical Section */
     __disable_irq();
     
-    ViiROS_BlockWatch();
-    ViiROS_Scheduler();
+    ViiROS_BlockWatch(); /**< Blocked threads management */
+    ViiROS_Scheduler(); /**< Update the threads */ 
     
+    /* End Critical Section */
     __enable_irq();
+    
 }
 
 /**

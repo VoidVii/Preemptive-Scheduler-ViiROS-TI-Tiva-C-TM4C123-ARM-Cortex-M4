@@ -61,7 +61,6 @@ static volatile uint32_t ViiROS_readyMask = 0U;
 /** Blocked thread bitmask  */
 static volatile uint32_t ViiROS_blockedMask = 0U;
 
-
 /*============================================================================*/
 /*                        Idle Thread Declaration                             */
 /*============================================================================*/
@@ -78,7 +77,16 @@ static uint32_t stack_ViiROS_Idle[40]; /**<stack for Idle-Thread */
 static void ViiROS_onIdle(void)
 {
   while(1){
-   __WFI(); /**< Wait for interrupt and sleep until */
+    /* Only for visualization in Pulsview (Logic Analyzer) */
+    uint32_t volatile i;
+    for(i = 0; i < 1500; i++){
+      GPIO_WritePin(GPIO_PORTF, Switch_2, 1U);
+      GPIO_WritePin(GPIO_PORTF, Switch_2, 0U);
+    }
+    /* Only for visualization in Pulsview (Logic Analyzer) */
+    
+    
+   //__WFI(); /**< Wait for interrupt and sleep until */
   }
 }
 
@@ -114,6 +122,7 @@ void ViiROS_Init()
                      ViiROS_onIdle, 
                      0U, 
                      stack_ViiROS_Idle, sizeof(stack_ViiROS_Idle));
+  
   /* NULL for the very first context switch */
   ViiROS_current = NULL;
 }
@@ -126,22 +135,22 @@ void ViiROS_Init()
 */
 void ViiROS_Scheduler(void)
 {
-  ViiROS_Thread *current = ViiROS_current;
+  ViiROS_Thread *current = ViiROS_current; /**< Current-thread already known */
   ViiROS_Thread *next;
   
   if(ViiROS_readyMask == 0U) /**< no thread ready = idle */
   {
-    next = Active_Thread[0];
+    next = Active_Thread[0]; /**< load idle thread */
   }
   else 
   {
     uint32_t highPrio = LOG2(ViiROS_readyMask); /**< highest ready prio */
-    next = Active_Thread[highPrio];
+    next = Active_Thread[highPrio]; /**< load highest ready Thread into next */
   }
   
-  if(current != next)
+  if(current != next) /**< update and trigger PendSV only when thread changed */
   {
-    ViiROS_next = next;
+    ViiROS_next = next; /**< set the next thread to run */
     SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
   } 
 }
@@ -159,13 +168,16 @@ void ViiROS_Run(void)
 {
   ViiROS_lastInit(); /**<Add here individual code e. g. Switch interrupt,...  */
   
+  /* Start Critical Section */
   __disable_irq();
+  
   /* Give up control to ViiROS */
   ViiROS_Scheduler();
   
+  /* End Critical Section */
   __enable_irq();
   
-  /**< code will never execute*/
+  /* following code will never execute - just for debugging purpose */
  while(1)
  {   
    GPIO_WritePin(GPIO_PORTF, RED_LED, 1U);
@@ -199,21 +211,23 @@ void ViiROS_Run(void)
 */
 void ViiROS_BlockTime(uint32_t time)
 {  
-  uint32_t current_bit;
-  __disable_irq();
+  uint32_t current_bit; /**< local Bit-Variable for local thread management */
+
+  __disable_irq(); /**< Start Critical Section */
   
-  if(ViiROS_current != Active_Thread[0])
+  if(ViiROS_current != Active_Thread[0]) /**< safety for Idle-Thead */
   {
-    /** Mask[bit] => bit = priority - 1 */ 
+    /* Mask[bit] => bit = priority - 1 */ 
     current_bit = 1U << (ViiROS_current->priority - 1U);
     
     ViiROS_current->blocktime = time; /**< set blocktime */
     ViiROS_readyMask &= ~current_bit; /**< clear bit in readyMask */
     ViiROS_blockedMask |= current_bit; /**< set bit in blockedMask */
     
-    ViiROS_Scheduler();
+    ViiROS_Scheduler(); /**< call Scheduler for update */
   }
-  __enable_irq();
+     
+  __enable_irq(); /**< End Critical Section */
 }
 
 /*----------------------------- blockWatch() ---------------------------------*/
@@ -225,15 +239,18 @@ void ViiROS_BlockTime(uint32_t time)
 */
 void ViiROS_BlockWatch(void)
 {
-  /** runs only if any blocked threads exist */
-  if(ViiROS_blockedMask != 0U)
+  if(ViiROS_blockedMask != 0U)/**< runs only if blocked threads exist */
   {
     uint32_t watchSet = ViiROS_blockedMask; /**< local copy to work with */
-    /** repeat as long as at least one blocked thread remains */
+    
+    /* repeat as long as at least one blocked thread remains */
     while (watchSet != 0U)
     {
-      uint32_t prio = LOG2(watchSet);
-      ViiROS_Thread *thread = Active_Thread[prio];
+      uint32_t prio = LOG2(watchSet); /**< get next blocked thread */
+      
+      /* Pointer to the blocked Thread-TCB */
+      ViiROS_Thread *thread = Active_Thread[prio]; 
+      
       --thread->blocktime; /**< decrement blockedtime of selected thread*/
       
       /** index = prio - 1 - array[index] */
@@ -243,11 +260,10 @@ void ViiROS_BlockWatch(void)
       /** when reaching 0 manage the ready- and blockedMask */
       if(thread->blocktime == 0U)
       {
-        ViiROS_blockedMask &= ~watchBit;
-        ViiROS_readyMask |= watchBit;
+        ViiROS_blockedMask &= ~watchBit; /**< clear blocked thread */
+        ViiROS_readyMask |= watchBit; /**< set thread as ready */
       }
     }
-    
   }
 }
 
@@ -300,10 +316,7 @@ void ViiROS_ThreadStart(
       */
       uint32_t *sp = (uint32_t *)((uint32_t)stk_Storage + stk_Size);
       sp = (uint32_t *)((uint32_t)sp & ~0x7);  
-     // uint32_t *sp = (uint32_t *)((((uint32_t)stk_Storage + stk_Size)/8)*8);
-      /**
-        Other method for 8-byte-alignment:
-        sp = (uint32_t *)((uint32_t)sp & ~7);  // 8-Byte-Alignment */
+ 
       
       /** hardware stack frame - caller saved */
       *--sp = (1U << 24);        /**< xPSR (Thumb-Bit = 1 if 0 = HardFault)*/
@@ -311,9 +324,9 @@ void ViiROS_ThreadStart(
       *--sp = 0xFFFFFFFD;        /**< LR = 0xFFFFFFFD => EXC_RETURN */
       *--sp = 0xCAFECAFE;        /**< R12 */
       *--sp = 0xCAFECAFE;        /**< R3 */
-      *--sp = 0xCAFEBABE;        /**< R2 */
-      *--sp = 0xCAFEBABE;        /**< R1 */
-      *--sp = 0xCAFEBABE;        /**< R0 */  
+      *--sp = 0xCAFECAFE;        /**< R2 */
+      *--sp = 0xCAFECAFE;        /**< R1 */
+      *--sp = 0xCAFECAFE;        /**< R0 */  
       /* software stack frame - calle saved  */
       *--sp = 0xCAFEBABE;        /**< R11 */
       *--sp = 0xCAFEBABE;        /**< R10 */
@@ -322,12 +335,18 @@ void ViiROS_ThreadStart(
       *--sp = 0xCAFEBABE;        /**< R7 */
       *--sp = 0xCAFEBABE;        /**< R6 */
       *--sp = 0xCAFEBABE;        /**< R5 */
-      *--sp = 0xCAFEBABE;        /**< R4 */
+      *--sp = 0xCAFEBABE;        /**< R4 */ 
       
-      me->sp = sp;
+      me->sp = sp; /**< set sp of thread to the calculated calue for R4 */
       
-      //me->sp = sp; /**< set sp of thread to the calculated calue */
-
+      /* End of stack - lowest address */
+      uint32_t *stack_limit = (uint32_t *)stk_Storage;
+      
+      /* Prefil the unused stack */
+      for(uint32_t *i = sp; i > stack_limit; i--){
+        *--sp = 0xDEADBABE;
+      }
+ 
       /** Register the thread in the active thread array */
       Active_Thread[priority] = me;
       me->priority = priority; /**< save desired priority */
@@ -393,52 +412,58 @@ void ViiROS_ThreadStart(
 *        0x1fe: 0xb662         CPSIE     i
 *
 *@warning Code from Disassembly need manuel modification!!!
+*@warning __stackless is IAR specific -> __attribute__((naked)) GCC / Keil MDK
 */ 
-
-
 __stackless void PendSV_Handler(void)
 {
+  /* __asm - CMSIS = Code in Assembler in IAR / KEIL MDK // __asm__ in GCC */
   __asm volatile(
   
-        /* __disable_irq();*/
+        /* __disable_irq(); start Critical Section */
        " CPSID     i                    \n"
+       
+       
+       /* if (ViiROS_current != 0) */
+       " LDR.N     R2, =ViiROS_current   \n"    // R2 = &current 
+       " LDR       R0, [R2]              \n"    // R0 = current-TCB (Value of R2)
+       " CBZ       R0, PendSV_first_run  \n"    // R0 == 0? -> jump to first_run
          
-        /* if (ViiROS_current != 0) */
-       " LDR.N     R2, =ViiROS_current   \n"    // R2 = current 
-       " LDR       R0, [R2]              \n"    // R0 = current-TCB
-       " CBZ       R0, PendSV_first_run  \n"    // R0 == 0? -> restore
-
+       /* #### Save current-thread ###### */
        /* save R4 - R11 on stack */  
        " MRS       R1, PSP               \n"    // R1 = PSP
          
        /* Store Multiple, Decrement Before */
        " STMDB     R1!, {R4-R11}         \n"    // R1 = new PSP at R4
+       /* PSP = ViiROS_next->sp; */
        " STR       R1, [R0]              \n"    // TCB->sp = R1
          
-       /* sp = ViiROS_next->sp; */
+       /*##### Load next-thread ##########*/
        "PendSV_restore:                  \n"
        " LDR       R0, =ViiROS_next      \n"     // R0 = next
-       " LDR       R1, [R0]              \n"     // R1 = next-TCB
+       " LDR       R1, [R0]              \n"     // R1 = next-TCB (Value at R0)
        " LDR       R0, [R1]              \n"     // R0 = next-TCB->sp
        /* Load multiple, increment after */   
        " LDMIA     R0!, {R4-R11}         \n"     // Load R4 - R11, new sp at R0
        " MSR       PSP, R0               \n"     // PSP = R0 (SP)
         
          
-        /* ViiROS_current = ViiROS_next; */
-       " STR       R1, [R2]             \n"
+        /* ViiROS_current = ViiROS_next; update current-thread */
+       " STR       R1, [R2]             \n"     //  R2 = &ViiROS_current 
+                                                // [R2] = Value at &Viiros_current
          
-        /* __enable_irq(); */
-       " CPSIE     i                    \n"
-       " BX        LR                   \n" 
+        /* __enable_irq(); end Critical Section */
+       " CPSIE     i                    \n"     // enable interrupt
+       " BX        LR                   \n"     // Jump with EXC_RETURN value
 
        /*#### FIRST pendSV RUN ######### */  
        "PendSV_first_run:               \n"
        
        " MOV       R3, #0x02            \n" 
-       " MSR       CONTROL, R3          \n" 
-       " ISB                            \n" 
-       " LDR       LR, =0xFFFFFFFD      \n" /* << bug fix wihtout interrupt returns to main */
-       " B         PendSV_restore       \n"  
+       " MSR       CONTROL, R3          \n" // set CONROLL = 0x02
+       " ISB                            \n" // make sure changes took place
+         
+       /* EXC_RETURN 0xFFFFFFFD = return to Thread Mode using PSP */
+       " LDR       LR, =0xFFFFFFFD      \n" // bug fix! wihtout it interrupt returns to main
+       " B         PendSV_restore       \n" 
   );
 }
