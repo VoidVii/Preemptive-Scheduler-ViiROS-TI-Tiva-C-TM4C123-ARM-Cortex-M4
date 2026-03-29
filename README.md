@@ -189,23 +189,23 @@ Die Grundstruktur von ViiROS wiederholt sich jede 1 ms mit dem SysTick der den P
 	*/
 	void ViiROS_Scheduler(void)
 	{
-	  ViiROS_Thread *current = ViiROS_current; /**< Current-thread already known */
+	  ViiROS_Thread *current = ViiROS_current; 
 	  ViiROS_Thread *next;
 	  
-	  if(ViiROS_readyMask == 0U) /**< no thread ready = idle */
+	  if(ViiROS_readyMask == 0U) 
 	  {
-	    next = Active_Thread[0]; /**< load idle thread */
+	    next = Active_Thread[0]; 
 	  }
 	  else 
 	  {
-	    uint32_t highPrio = LOG2(ViiROS_readyMask); /**< highest ready prio */
-	    next = Active_Thread[highPrio]; /**< load highest ready Thread into next */
+	    uint32_t highPrio = LOG2(ViiROS_readyMask);
+	    next = Active_Thread[highPrio]; 
 	  }
 	  
-	  if(current != next) /**< update and trigger PendSV only when thread changed */
+	  if(current != next) 
 	  {
-	    ViiROS_next = next; /**< set the next thread to run */
-	    SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; /**<trigger PendSV for context switch */
+	    ViiROS_next = next; 
+	    SCB->ICSR = SCB_ICSR_PENDSVSET_Msk;
 	  } 
 	}
 
@@ -308,7 +308,7 @@ Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Coope
 
 ### ViiROS_current =! NULL beim System-Start
 1. Falscher Current-Thread zum System-Start
-2. ViiROS_IDLE (Current-Thread) initialisierter Stack mit ViiROS_Idle->SP 0x2000´0248 reigt auf R4 = 0xCAFEBABE
+2. ViiROS_IDLE (Current-Thread) initialisierter Stack mit ViiROS_Idle->SP 0x2000´0248 zeigt auf R4 = 0xCAFEBABE
 3. ViiROS_Idle->SP wurde im PendSV beim speichern des PSP in Idle->Sp mit flaschen Wert überschrieben => Idle-Thread zerstört
 5. CBZ (Abfrage cuurent == 0?) keinen Sprung zum PendSV_first_run
 	- CONTROL(0x02) und LR(0xFFFF FFFD) wurden nicht gesetzt!
