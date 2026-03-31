@@ -1,31 +1,67 @@
-# ViiROS – eigenes Präemptives MINI RTOS für ARM Cortex-M4 (TM4C123GL - TM4C123GH6PM)
+# ViiROS – Präemptives MINI RTOS für ARM Cortex-M4 (TM4C123GL - TM4C123GH6PM)
 
-Dieses Projekt umfasst ein **eigenständig von 0 erarbeitetes Mini RTOS** mit:
-
-<img width="300" height="260" alt="grafik" src="https://github.com/user-attachments/assets/dfaf1cd7-16ac-479e-95ba-650f5d7e973a" /> 
-
-Quelle: https://www.ti.com/tool/de-de/EK-TM4C123GXL			
-
-- präemptives O(1)-Scheduling
-- prioritätenbasierte Ausführung der Threads
-- klassischem Context Switch über PendSV
-- MSP für Interrupts (Handler Mode)
-- PSP für Threads (Thread Mode)
-- SysTick als 1ms Zeitbasis
+<table>
+  <tr>
+    <td width="60%">
+      <b>Übersicht:</b><br>
+      ViiROS ist ein eigenständig von Grund auf entwickelter minimaler, präemptiver Echtzeitkernel für ARM Cortex-M4. 
+	  Entwickelt als Lernprojekt zur Vertiefung von RTOS-Konzepten und Hardware-naher Programmierung.
+	  Der Fokus liegt auf prioritätsbasiertem Scheduling, Context Switch (PendSV) und SysTick-Interrupt als System-Takt – vollständig ohne externe Bibliotheken
+    </td>
+    <td width="40%">
+      <img width="450" height="370" alt="grafik" src="https://github.com/user-attachments/assets/e00fc2a9-9b90-4142-ba76-9efb73b29d35" />
+    </td>
+  </tr>
+</table>
 
 
 ## Proof of Concept
 <img width="1157" height="230" alt="AnalyzerViewOnPreemptiveScheduling2" src="https://github.com/user-attachments/assets/a66bb215-a624-423a-8709-959575a12aff" />
 
-Zu erkennen ist, dass die **Thread durch höchere Prioritäten unterbrochen** werden. Der SysTick kommt jede 1 ms und ist das Herz des Systems.
+Die PulsView-Messung veranschaulicht die prioritätsbasierte, präemptive Arbeitsweise des Kernels.
 
-Der SysTick wurde zum Zwecke der Verdeutlichung mit dem **"Triggern"** des GPIOF Pins 4 versehen. Ähnliches trifft auch auf den Idle-Thread, der den Pin 0 toggelt zu.
-Auch die Thread-Handler wurden mit dem Toggeln von den jeweiligen LEDs beauftragt. 
+Die Prioritäten nehmen von oben nach unten ab:
+- Red = 3, Blue = 2, Green = 1, Idle = 0
 
-Die Prioritätem nehmen von oben nach unten ab: Red = 3, Blue = 2, Green = 1, Idle = 0.
+Pin-Belegung (PORT F):
+- SysTick = Pin 4 | Red = Pin 1 | Blue = Pin 2 | Green = Pin 3 | Idle = Pin 0
 
-Mehr zum Setup gibt es am Ende der Readme.
+Zu erkennen ist:
 
+- Der SysTick-Interrupt tritt im festen Takt von 1 ms auf
+- Der Scheduler startet zuverlässig immer den Thread mit der höchsten Priorität
+- Threads werden gemäß den Systemregeln durch höher priorisierte Threads präemptiv unterbrochen
+- Der Context Switch nach dem Scheduling erfolgt korrekt
+- **Unterbrochene Threads setzen ihre Ausführung exakt an der Stelle der Unterbrechung fort**
+- Der Idle-Thread läuft nur, wenn kein anderer Thread aktiv ist
+
+Zur Visualisierung wurde der SysTick-Interrupt-Handler so erweitert, dass GPIOF Pin 4 getriggert wird.
+Der Idle-Thread toggelt entsprechend Pin 0.
+
+Die Thread-Handler selbst sind so implementiert, dass sie die jeweiligen LEDs mehrfach toggeln und dadurch die Ausführung sichtbar machen.
+
+Weitere Details zum Setup befinden sich am Ende der Readme.
+
+## Ziel des Projekts
+Ziel war es, die grundlegenden Mechanismen eines präemptiven Schedulers praktisch zu verstehen und selbst umzusetzen.
+
+Der Fokus lag dabei insbesondere auf:
+- Prioritätbasiertem Scheduling
+- Context Switch mit PendSV in Assembler
+- Nutzung von MSP und PSP
+- Verständnis Arm Cortex-M4 Architektur
+
+## Erkenntnisse 
+- Context Switch ist deutlich komplexer als es auf den ersten Blick wirkt
+- Fehler im Stack-Handling führen schnell zu schwer nachvollziehbaren Problemen
+- Das Zusammenspiel von Interrupts, Scheduler und CPU-Modi ist entscheidend für ein stabiles System
+
+## Eigenschaften des Systems:
+- prioritätenbasierte parallele Ausführung mehrere Threads
+- Context Switch über PendSV in Assembler
+- MSP für Interrupts (Handler Mode)
+- PSP für Threads (Thread Mode)
+- SysTick als 1ms Zeitbasis
 
 ## Features
 - Thread-System
@@ -110,11 +146,11 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 
 
 ## Projektstruktur
-	Datei:			Beschreibung:
-	ViiROS.c/h		Kernel, Scheduler, Blocking
-	SysTick.c/h		Zeitbasis (1ms)
-	GPIO.c/h		LED, Taster 
-	main.c			Beispiel-Threads
+			
+- ViiROS.c/h 	->	Kernel, Scheduler, Blocking
+- SysTick.c/h	->	Zeitbasis (1ms)
+- GPIO.c/h		->	LED, Taster 
+- main.c		->	Beispiel-Threads
 
 
 ## Hardware & Toolchain
@@ -177,7 +213,7 @@ Die Grundstruktur von ViiROS wiederholt sich jede 1 ms mit dem SysTick der den P
 2. BlockWatch() =>  **Thread->blocktime** **runtergezählt**
 	- Wird **blocktime == 0** => Thread in blockedMask löschen und in readyMask setzen
 3. Scheduler() => Update nächsten ready Thread mit höchster Priorität
-	- Trigger Context Switch durch setzen von PendSV-Pending-Bit wenn momentatner Thread nicht dem nächsten Thread entspricht
+	- Trigger Context Switch durch setzen von PendSV-Pending-Bit wenn momentaner Thread nicht dem nächsten Thread entspricht
 4. Nächsten Thread ausführen
 	
 ### Scheduler
@@ -298,18 +334,19 @@ Dieses Projekt baut konzeptionell auf den Inhalten des **Modern Embedded Systems
 
 Der Code ist keine 1:1-Umsetzung von Beispielen, sondern meine eigene Arbeit, in der ich die Konzepte angewendet, weiterentwickelt und an meine Anforderungen angepasst habe. Die Lehren aus diesen Bemühungen und die eigenständige Umsetzung ermöglichten es mir, die Themen nicht nur anzuwenden, sondern auch auf einer tieferen Ebene zu verstehen und zu verinnerlichen.
 
-Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Cooperative scheduler auf und repräsentiert meine erstes größere Projekt, **von 0 zum Minit-RTOS**, im Thema Embedded Systems. 
+Das Projekt ViiROS – Präemptives MINI RTOS baut auf meinem vorherigen Projekt Kooperativer-Scheduler auf und repräsentiert meine erstes größere Projekt, **von 0 zum Mini-RTOS**, im Thema Embedded Systems. 
 
 ## Debugging - Screenshots - Bugs
 
-### Zu kleine Stackgröße --> Stack Overflow -> BusFault, Active-Thread[] korumpiert
+### Zu kleine Stackgröße --> Stack Overflow -> BusFault, Active-Thread[] korrumpiert
 
 <img width="650" height="350" alt="ZuKleineStackProbleme" src="https://github.com/user-attachments/assets/0b4f6e69-1684-4dea-a1d9-7c51c62d8116" />
 
 ### ViiROS_current =! NULL beim System-Start
 1. Falscher Current-Thread zum System-Start
 2. ViiROS_IDLE (Current-Thread) initialisierter Stack mit ViiROS_Idle->SP 0x2000´0248 zeigt auf R4 = 0xCAFEBABE
-3. ViiROS_Idle->SP wurde im PendSV beim speichern des PSP in Idle->Sp mit flaschen Wert überschrieben => Idle-Thread zerstört
+3. ViiROS_Idle->SP wurde im PendSV beim speichern des PSP in Idle->Sp mit falschen Wert überschrieben => Idle-Thread zerstört
+4. LR-Register für zurück zu main ViiROS_Run() (MSP)
 5. CBZ (Abfrage cuurent == 0?) keinen Sprung zum PendSV_first_run
 	- CONTROL(0x02) und LR(0xFFFF FFFD) wurden nicht gesetzt!
 	- Kein Wechsel von MSP auf PSP
@@ -320,11 +357,14 @@ Das Projekt Preemptive scheduler ViiROS baut auf meinem vorherigen Projekt Coope
 <img width="850" height="578" alt="CurrentFalschGesetzt" src="https://github.com/user-attachments/assets/fbf25b5e-af18-447d-ad58-934eb94dcfe3" />
 
 # Setup
-1. Laptop -> IAR Workbench (Arm), Pulsview
+1. Laptop -> Tools: IAR Workbench (Arm), PulsView
 2. Dev-Board Tiva C Series LaunchPad TM4C123GXL -> LEDs, User Switch und mehr
 3. Logic Analyzer 24MHz 8 Channel
 
 
-![Setup](https://github.com/user-attachments/assets/721a0691-2700-42d8-88e7-1d9f7d48b26c)
+<img width="850" height="550" alt="grafik" src="https://github.com/user-attachments/assets/313899da-e5b0-461a-91c9-caafd1015e4e" />
+
+
+
 
 
