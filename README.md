@@ -1,23 +1,13 @@
-# ViiROS – eigenes Präemptives MINI RTOS für ARM Cortex-M4 (TM4C123GL - TM4C123GH6PM)
+# ViiROS – Präemptives MINI RTOS für ARM Cortex-M4 (TM4C123GL - TM4C123GH6PM)
 
-Dieses Projekt umfasst ein **eigenständig von 0 erarbeitetes Mini RTOS** mit:
+Dieses Projekt präsentiert ein eigentständig entwickeltes Mini-RTOS zur praktischen Auseinandersetzung mit präemptiven Scheduling und Context Switching auf ARM Cortex-M4.
 
-<img width="300" height="260" alt="grafik" src="https://github.com/user-attachments/assets/dfaf1cd7-16ac-479e-95ba-650f5d7e973a" /> 
-
-Quelle: https://www.ti.com/tool/de-de/EK-TM4C123GXL			
-
-- präemptives O(1)-Scheduling
-- prioritätenbasierte Ausführung der Threads
-- klassischem Context Switch über PendSV
-- MSP für Interrupts (Handler Mode)
-- PSP für Threads (Thread Mode)
-- SysTick als 1ms Zeitbasis
-
+Bild
 
 ## Proof of Concept
 <img width="1157" height="230" alt="AnalyzerViewOnPreemptiveScheduling2" src="https://github.com/user-attachments/assets/a66bb215-a624-423a-8709-959575a12aff" />
 
-Zu erkennen ist, dass die **Thread durch höchere Prioritäten unterbrochen** werden. Der SysTick kommt jede 1 ms und ist das Herz des Systems.
+Auf dem Screenshot ist der Ablauf des gestarteten Threads und SysTick-Ticks zusehen. Die **Threads** folgen den Regeln des System und werden **durch höchere Prioritäten unterbrochen**. Der SysTick als Zeitbasis und Management kommt regelmäßig jede 1 ms und ist das Herz des Systems.
 
 Der SysTick wurde zum Zwecke der Verdeutlichung mit dem **"Triggern"** des GPIOF Pins 4 versehen. Ähnliches trifft auch auf den Idle-Thread, der den Pin 0 toggelt zu.
 Auch die Thread-Handler wurden mit dem Toggeln von den jeweiligen LEDs beauftragt. 
@@ -26,6 +16,21 @@ Die Prioritätem nehmen von oben nach unten ab: Red = 3, Blue = 2, Green = 1, Id
 
 Mehr zum Setup gibt es am Ende der Readme.
 
+## Ziel des Projekts
+Ziel war es, die grundlegenden Mechanismen eines präemtiven Schedulers praktisch zu verstehen und selbst umzusetzen.
+
+Der Fokus lag dabei insbesondere auf:
+- Prioritätbasiertem Scheduling
+- Conext Switch mit PendSV mit Asssembler
+- Nutzung von MSP und PSP
+
+
+## Eingenschaften des Systems:
+- prioritätenbasierte parallele Ausführung mehrere Threads
+- Context Switch über PendSV in Assemlber
+- MSP für Interrupts (Handler Mode)
+- PSP für Threads (Thread Mode)
+- SysTick als 1ms Zeitbasis
 
 ## Features
 - Thread-System
