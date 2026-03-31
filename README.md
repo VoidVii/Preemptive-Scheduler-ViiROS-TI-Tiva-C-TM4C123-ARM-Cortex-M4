@@ -9,7 +9,7 @@ bild
 
 Auf dem Screenshot ist der Ablauf der gestarteten Threads und SysTick-Interrupts zusehen. Die **Threads** folgen den Regeln des System und werden **durch höchere Prioritäten unterbrochen**. Der SysTick als Zeitbasis und Management kommt regelmäßig jede 1 ms und ist das Herz des Systems.
 
-Der SysTick wurde zum Zwecke der Verdeutlichung mit dem **"Triggern"** des GPIOF Pins 4 versehen. Ähnliches trifft auch auf den Idle-Thread, der den Pin 0 toggelt zu.
+Der SysTick wurde zum Zwecke der Verdeutlichung mit dem **"Triggern"** des GPIOF Pins 4 versehen. Ähnliches trifft auch auf den Idle-Thread, der den Pin 0 toggelt, zu.
 Auch die Thread-Handler wurden mit dem Toggeln von den jeweiligen LEDs beauftragt. 
 
 Die Prioritätem nehmen von oben nach unten ab: Red = 3, Blue = 2, Green = 1, Idle = 0.
@@ -24,6 +24,11 @@ Der Fokus lag dabei insbesondere auf:
 - Conext Switch mit PendSV mit Asssembler
 - Nutzung von MSP und PSP
 
+## Erkenntnisse 
+- Context Switch ist deutlich komplexer als es auf den ersten Blick wirkt
+- Fehler im Stack-Handling führen schnell zu schwer nachvollziehbaren Problemen
+- Das Zusammenspiel von Interrupts, Scheduler und CPU-Modi ist entscheident für ein stabiles System
+- Das Thema rum um die Funktionsweise eines RTOS ist enorm interessant
 
 ## Eingenschaften des Systems:
 - prioritätenbasierte parallele Ausführung mehrere Threads
