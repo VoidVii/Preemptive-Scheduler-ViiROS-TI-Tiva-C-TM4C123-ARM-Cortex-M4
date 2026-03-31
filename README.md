@@ -146,12 +146,11 @@ Nach vollständiger Konfiguration und Initialisierung der Komponenten wird die K
 
 
 ## Projektstruktur
-
-Datei:			
-ViiROS.c/h 	->	Kernel, Scheduler, Blocking
-SysTick.c/h	->	Zeitbasis (1ms)
-GPIO.c/h	->	LED, Taster 
-main.c		->	Beispiel-Threads
+			
+- ViiROS.c/h 	->	Kernel, Scheduler, Blocking
+- SysTick.c/h	->	Zeitbasis (1ms)
+- GPIO.c/h		->	LED, Taster 
+- main.c		->	Beispiel-Threads
 
 
 ## Hardware & Toolchain
